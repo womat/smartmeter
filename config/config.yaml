@@ -1,0 +1,147 @@
+debug:
+  # log file e.g. /tmp/emu.log; stderr; stdout
+  # default: stderr
+  file: stderr
+  # flag: (default: standard)
+  # trace    >> Warning | Info | Error | Fatal | Debug | Trace
+  # debug    >> Warning | Info | Error | Fatal | Debug
+  # standard >> Warning | Info | Error | Fatal
+  flag: standard
+clients:
+    # -type: mbclient | mbgateway| fritz!powerline
+    #    name: name of device
+    #    connection: connectionstring eg: TCP 192.0.2.10:502  DeviceId:1 Timeout:500 (timeout in ms (default 1000ms)
+    #    pollingperiod: in seconds (default 60)
+    #    deviceid: [1-247] (default 1)
+  primarymeter:
+    type: mbclient
+    connection: TCP 192.0.2.10:502  DeviceId:1 Timeout:500
+    polling: 15
+    deviceId: 1
+    register:
+      unknown:
+        server: 'Addr:18 Value:285 uint16'
+      Device Identifier:
+        server: 'Addr:768 Value:117 uint16'
+      SerialNumber:
+        server: 'Addr:4176 Value:99999999 uint32'
+  heatpump:
+    type: mbgateway
+    connection: HTTP http://raspberryz:8080 DeviceId:1 Timeout:500
+    polling: 15
+    deviceId: 2
+    register:
+      unknown:
+        client: 'Addr:18 uint16 quantity:1'
+        server: 'Addr:18 uint16'
+      Device Identifier:
+        client: 'Addr:768 uint16 quantity:1'
+        server: 'Addr:768 uint16'
+      SerialNumber:
+        client: 'Addr:4176 uint16 quantity:2'
+        server: 'Addr:4176 uint16'
+      Smartmeter Data:
+        client: 'Addr:4096 uint16 quantity:64'
+        server: 'Addr:4096 uint16'
+  dryer:
+    type: fritz!powerline
+    connection: HTTP http://fritz.box
+    polling: 15
+    deviceId: 3
+    register:
+      unknown:
+        server: 'Addr:18 Value:285 uint16'
+      Device Identifier:
+        server: 'Addr:768 Value:117 uint16'
+      SerialNumber:
+        server: 'Addr:4176 Value:88888888 uint32'
+modbusclient:
+  connection: TCP 192.0.2.10:502  DeviceId:1 Timeout:500
+  PollingPeriod: 10
+
+modbusserver:
+  name: Fronius Smartmeter
+  CheckId: 99
+  # connectionstring eg: RTU /dev/ttyS0,9600,8,N,1 DeviceId:1 Timeout:1
+  # Timeout in ms (default 1000ms)
+  # DeviceId default 1
+  connection: RTU com3,9600,8,N,1 DeviceId:1 Timeout:1
+  options:
+    rtsctsflowcontrol: false
+    intercharactertimeout: 4000
+    minimumreadsize: 1
+    rs485enable: false
+    rs485rtshighduringsend: false
+    rs485rtshighaftersend: false
+    rs485rxduringtx: false
+    rs485delayrtsbeforesend: 0
+    rs485delayrtsaftersend: 0
+register:
+  unknown:
+    server: 'Addr:18 Value:285 uint16'
+  Device Identifier:
+    server: 'Addr:768 Value:117 uint16'
+  SerialNumber:
+    server: 'Addr:4176 Value:99999999 uint32'
+  Current L1:
+    client: 'Addr:58 uint32 SF:-3'
+    server: 'Addr:4102 uint32 SF:3'
+  Current L2:
+    client: 'Addr:62 uint32 SF:-3'
+    server: 'Addr:4104 uint32 SF:3'
+  Current L3:
+    client: 'Addr:66 uint32 SF:-3'
+    server: 'Addr:4106 uint32 SF:3'
+  Day Energy Smartfox:
+    client: 'Addr:32 uint32 SF:0'
+  Day Energy from grid:
+    client: 'Addr:24 uint32 SF:0'
+  Day Energy into grid:
+    client: 'Addr:28 uint32 SF:0'
+  Energy Smartfox:
+    client: 'Addr:16 uint64 SF:0'
+  Energy into grid:
+    client: 'Addr:8 uint64 SF:0'
+    server: 'Addr:4128 uint32 SF:0'
+  Frequeny:
+    client: 'Addr:76 uint16 SF:-2'
+    server: 'Addr:4134 uint16 SF:1'
+  Power L1:
+    client: 'Addr:40 uint32 SF:0'
+    server: 'Addr:4140 uint32 SF:2'
+  Power L2:
+    client: 'Addr:44 uint32 SF:0'
+    server: 'Addr:4142 uint32 SF:2'
+  Power L3:
+    client: 'Addr:48 uint32 SF:0'
+    server: 'Addr:4144 uint32 SF:2'
+  Power total:
+    client: 'Addr:36 uint32 SF:0'
+    server: 'Addr:4116 uint32 SF:2'
+  Powerfactor L1:
+    client: 'Addr:70 sint16 SF:-4'
+    server: 'Addr:4164 sint16 SF:2'
+  Powerfactor L2:
+    client: 'Addr:72 sint16 SF:-4'
+    server: 'Addr:4165 sint16 SF:2'
+  Powerfactor L3:
+    client: 'Addr:74 sint16 SF:-4'
+    server: 'Addr:4166 sint16 SF:2'
+  Voltage L1-L2:
+    client: 'Addr:52 uint16 SF:-1'
+    server: 'Addr:4110 uint32 SF:3 Mul:1.732050807568877'
+  Voltage L1-N:
+    client: 'Addr:52 uint16 SF:-1'
+    server: 'Addr:4096 uint32 SF:3'
+  Voltage L2-L3:
+    client: 'Addr:54 uint16 SF:-1'
+    server: 'Addr:4112 uint32 SF:3 Mul:1.732050807568877'
+  Voltage L2-N:
+    client: 'Addr:54 uint16 SF:-1'
+    server: 'Addr:4098 uint32 SF:3 '
+  Voltage L3-L1:
+    client: 'Addr:56 uint16 SF:-1'
+    server: 'Addr:4114 uint32 SF:3 Mul:1.732050807568877'
+  Voltage L3-N:
+    client: 'Addr:56 uint16 SF:-1'
+    server: 'Addr:4100 uint32 SF:3'
