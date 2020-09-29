@@ -44,11 +44,12 @@ type mbgwClientHandler struct {
 
 func main() {
 	defer global.Config.Debug.File.Close()
+	// TODO: get debugging for each package from config file
 	debug.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
-	framereader.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
+	framereader.SetDebug(global.Config.Debug.File, framereader.Default)
 	mbmaster.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
 	mbserver.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
-	mbclient.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
+	mbclient.SetDebug(global.Config.Debug.File, framereader.Default)
 	mbgw.SetDebug(global.Config.Debug.File, global.Config.Debug.Flag)
 
 	// initialize modbus server
@@ -63,6 +64,7 @@ func main() {
 
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
+	//TODO real time and polling mode: w/o new function3 it'S polling mode >> config in config file is missing
 	ModBusServer.SetNewFunction3Handler()
 
 	//TODO support multiple connection strings from config file
@@ -197,7 +199,7 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 
 			var waitGroup sync.WaitGroup
-			for n, c := range server.Devices[handler.DeviceId].RChannel {
+			for n, c := range server.Devices[handler.DeviceId].Done {
 				waitGroup.Add(1)
 
 				go func(name *chan bool, channel chan bool) {
@@ -205,13 +207,13 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 						// recover from panic caused by writing to a closed channel
 						if r := recover(); r != nil {
 							err := fmt.Errorf("%v", r)
-							debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]RChannel: %v\n", handler.DeviceId, name, err)
-							delete(server.Devices[handler.DeviceId].RChannel, name)
+							debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]Done: %v\n", handler.DeviceId, name, err)
+							delete(server.Devices[handler.DeviceId].Done, name)
 							return
 						}
 					}()
 
-					debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]RChannel\n", handler.DeviceId, name)
+					debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]Done\n", handler.DeviceId, name)
 					channel <- true
 					waitGroup.Done()
 				}(n, c)
@@ -243,7 +245,7 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 
 			var waitGroup sync.WaitGroup
-			for n, c := range server.Devices[handler.DeviceId].RChannel {
+			for n, c := range server.Devices[handler.DeviceId].Done {
 				waitGroup.Add(1)
 
 				go func(name *chan bool, channel chan bool) {
@@ -251,13 +253,13 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 						// recover from panic caused by writing to a closed channel
 						if r := recover(); r != nil {
 							err := fmt.Errorf("%v", r)
-							debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]RChannel: %v\n", handler.DeviceId, name, err)
-							delete(server.Devices[handler.DeviceId].RChannel, name)
+							debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]Done: %v\n", handler.DeviceId, name, err)
+							delete(server.Devices[handler.DeviceId].Done, name)
 							return
 						}
 					}()
 
-					debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]RChannel\n", handler.DeviceId, name)
+					debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]Done\n", handler.DeviceId, name)
 					channel <- true
 					waitGroup.Done()
 				}(n, c)

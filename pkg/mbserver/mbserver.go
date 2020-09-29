@@ -14,8 +14,8 @@ import (
 // Server is a Modbus slave with allocated memory for discrete inputs, coils, etc.
 
 type DeviceChannels struct {
-	Update   chan bool
-	RChannel map[*chan bool]chan bool
+	Update chan bool
+	Done   map[*chan bool]chan bool
 }
 
 type Server struct {
@@ -38,8 +38,8 @@ func NewServer() *Server {
 	}
 
 	s.Devices[1] = DeviceChannels{
-		Update:   make(chan bool, 1),
-		RChannel: map[*chan bool]chan bool{},
+		Update: make(chan bool, 1),
+		Done:   map[*chan bool]chan bool{},
 	}
 
 	return &s
@@ -64,8 +64,8 @@ func (s *Server) NewDevice(id uint8) (err error) {
 		return
 	}
 	s.Devices[id] = DeviceChannels{
-		Update:   make(chan bool, 1),
-		RChannel: map[*chan bool]chan bool{},
+		Update: make(chan bool, 1),
+		Done:   map[*chan bool]chan bool{},
 	}
 	return
 }
@@ -120,20 +120,22 @@ func (s *Server) SetNewFunction3Handler() {
 		}
 
 		debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
+		// TODO: send address and quantity to receiver, the receiver decides if the register should update in realtime
+		if device != 2 || numRegs >= 500 {
+			ready := make(chan bool)
+			defer close(ready)
 
-		ready := make(chan bool)
-		defer close(ready)
-		uid := &ready
-		s.Devices[device].RChannel[uid] = ready
+			uid := &ready
+			s.Devices[device].Done[uid] = ready
 
-		s.Devices[device].Update <- true
-
-		select {
-		case <-ready:
-		case <-time.After(5 * time.Second):
+			s.Devices[device].Update <- true
+			// TODO configure timeout
+			select {
+			case <-ready:
+			case <-time.After(5 * time.Second):
+			}
+			delete(s.Devices[device].Done, uid)
 		}
-		delete(s.Devices[device].RChannel, uid)
-
 		s.RLock()
 		defer s.RUnlock()
 
@@ -142,5 +144,5 @@ func (s *Server) SetNewFunction3Handler() {
 		return r, &mbmaster.Success
 	}
 
-	s.handler.RegisterFunctionHandler(2, ReadHoldingRegisters)
+	s.handler.RegisterFunctionHandler(3, ReadHoldingRegisters)
 }

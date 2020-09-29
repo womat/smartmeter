@@ -15,7 +15,7 @@ import (
 //
 // VERSION differs from semantic versioning as described in https://semver.org/
 // but we keep the correct syntax.
-const VERSION = "1.0.10+20200928"
+const VERSION = "1.0.11+20200929"
 
 type Register struct {
 	Address uint16

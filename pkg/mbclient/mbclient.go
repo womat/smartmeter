@@ -84,8 +84,8 @@ func (c *Client) receiver() {
 		// A function ensures that all channels and timers are ended after one run
 		// a defer is only called at the end of a function and not after the end of a loop!
 		func() {
-			finish := make(chan bool, 1)
-			defer close(finish)
+			done := make(chan bool, 1)
+			defer close(done)
 
 			timerOutTimer := time.NewTimer(c.timeout)
 			defer timerOutTimer.Stop()
@@ -101,7 +101,7 @@ func (c *Client) receiver() {
 							return
 						}
 					}()
-					finish <- true
+					done <- true
 				}()
 
 				clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
@@ -116,7 +116,7 @@ func (c *Client) receiver() {
 
 			// wait for Modbus Data
 			select {
-			case <-finish:
+			case <-done:
 			case <-timerOutTimer.C:
 				err = errors.New("timeout during receive data")
 			}

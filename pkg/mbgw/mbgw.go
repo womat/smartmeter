@@ -21,6 +21,7 @@ type Client struct {
 	connectionString string
 	ticker           time.Duration
 	timeout          time.Duration
+	init             bool
 	// stop receiving data
 	Stop chan bool
 	// update get data immediately
@@ -86,8 +87,8 @@ func (c *Client) receiver() {
 		// A function ensures that all channels and timers are ended after one run
 		// a defer is only called at the end of a function and not after the end of a loop!
 		func() {
-			finish := make(chan bool, 1)
-			defer close(finish)
+			done := make(chan bool, 1)
+			defer close(done)
 
 			timerOutTimer := time.NewTimer(c.timeout)
 			defer timerOutTimer.Stop()
@@ -103,7 +104,7 @@ func (c *Client) receiver() {
 							return
 						}
 					}()
-					finish <- true
+					done <- true
 				}()
 
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
@@ -111,8 +112,11 @@ func (c *Client) receiver() {
 					c.connectionString + "/readholdingregisters?Address=18&Quantity=1",
 					c.connectionString + "/readholdingregisters?Address=768&Quantity=1",
 					c.connectionString + "/readholdingregisters?Address=4176&Quantity=2",
-					c.connectionString + "/readholdingregisters?Address=4096&Quantity=64"}
-				for _, connectionString := range request {
+					c.connectionString + "/readholdingregisters?Address=4096&Quantity=59"}
+				for i, connectionString := range request {
+					if c.init && i < 3 {
+						continue
+					}
 					debuglog.Printf("performing http get: %v\n", connectionString)
 					resp, err := http.Get(connectionString)
 					if err != nil {
@@ -151,7 +155,7 @@ func (c *Client) receiver() {
 
 			// wait for API Data
 			select {
-			case <-finish:
+			case <-done:
 			case <-timerOutTimer.C:
 				err = errors.New("timeout during receive data")
 			}
@@ -171,6 +175,7 @@ func (c *Client) receiver() {
 		}
 		tracelog.Printf("send data to client channel: %+v\n", d)
 		c.Data <- d
+		c.init = true
 	}
 }
 
