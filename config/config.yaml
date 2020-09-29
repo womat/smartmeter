@@ -3,21 +3,34 @@ debug:
   # default: stderr
   file: stderr
   # flag: (default: standard)
-  # trace    >> Warning | Info | Error | Fatal | Debug | Trace
-  # debug    >> Warning | Info | Error | Fatal | Debug
-  # standard >> Warning | Info | Error | Fatal
-  flag: standard
+  #       trace    >> Warning | Info | Error | Fatal | Debug | Trace
+  #       debug    >> Warning | Info | Error | Fatal | Debug
+  #       standard >> Warning | Info | Error | Fatal
+  # flag: debug
+  package:
+    main: debug
+    mbclient: standatd
+    mbserver: standard
+    mbgw: standard
+    config: standard
+    debug: standard
+    mbmaster: standard
+    framereader: standard
 clients:
-    # -type: mbclient | mbgateway| fritz!powerline
-    #    name: name of device
-    #    connection: connectionstring eg: TCP 192.0.2.10:502  DeviceId:1 Timeout:500 (timeout in ms (default 1000ms)
-    #    pollingperiod: in seconds (default 60)
-    #    deviceid: [1-247] (default 1)
+  # key >> name of device
+  #   type: mbclient | mbgateway | fritz!powerline
+  #   connection: connectionstring eg: TCP 192.0.2.10:502  DeviceId:1 Timeout:500 (timeout in ms (default 1000ms)
+  #   pollingrate: in seconds (default 60) if parameter mode is set to request, the pollingrate can be quite high (eg 300s)
+  #   mode: (default polling)
+  #         request >> data are updated with each request
+  #         polling >> data are updated at the polling rate (parameter pollingrate)
+  #   deviceid: [1-247] (default 1)
   primarymeter:
     type: mbclient
-    connection: TCP 192.0.2.10:502  DeviceId:1 Timeout:500
-    polling: 15
-    deviceId: 1
+    connection: TCP 192.0.2.10:502 DeviceId:1 Timeout:100
+    pollingrate: 60
+    mode: request
+    deviceid: 1
     register:
       unknown:
         server: 'Addr:18 Value:285 uint16'
@@ -27,9 +40,10 @@ clients:
         server: 'Addr:4176 Value:99999999 uint32'
   heatpump:
     type: mbgateway
-    connection: HTTP http://raspberryz:8080 DeviceId:1 Timeout:500
-    polling: 15
-    deviceId: 2
+    connection: HTTP http://raspberryz:8080 Timeout:500
+    pollingrate: 60
+    mode: request
+    deviceid: 2
     register:
       unknown:
         client: 'Addr:18 uint16 quantity:1'
@@ -45,9 +59,10 @@ clients:
         server: 'Addr:4096 uint16'
   dryer:
     type: fritz!powerline
-    connection: HTTP http://fritz.box
-    polling: 15
-    deviceId: 3
+    connection: HTTP http://fritz.box Timeout:500
+    pollingrate: 15
+    mode: request
+    deviceid: 3
     register:
       unknown:
         server: 'Addr:18 Value:285 uint16'
@@ -55,17 +70,11 @@ clients:
         server: 'Addr:768 Value:117 uint16'
       SerialNumber:
         server: 'Addr:4176 Value:88888888 uint32'
-modbusclient:
-  connection: TCP 192.0.2.10:502  DeviceId:1 Timeout:500
-  PollingPeriod: 10
 
 modbusserver:
-  name: Fronius Smartmeter
-  CheckId: 99
-  # connectionstring eg: RTU /dev/ttyS0,9600,8,N,1 DeviceId:1 Timeout:1
-  # Timeout in ms (default 1000ms)
-  # DeviceId default 1
-  connection: RTU com3,9600,8,N,1 DeviceId:1 Timeout:1
+  #  connection: connectionstring eg: RTU /dev/ttyS0,9600,8,N,1 Timeout:200 (timeout in ms (default 1000ms)
+  #     Timeout: in ms (default 1000ms), Timeout for client response (if client mode = request)
+  connection: RTU com3,9600,8,N,1 Timeout:5000
   options:
     rtsctsflowcontrol: false
     intercharactertimeout: 4000

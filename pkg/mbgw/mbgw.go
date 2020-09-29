@@ -3,6 +3,7 @@ package mbgw
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -21,11 +22,10 @@ type Client struct {
 	connectionString string
 	ticker           time.Duration
 	timeout          time.Duration
-	init             bool
 	// stop receiving data
 	Stop chan bool
 	// update get data immediately
-	Update chan bool
+	Update chan struct{ Register, Quantity uint16 }
 	// Data contains the received data
 	Data chan ClientData
 }
@@ -34,7 +34,7 @@ type Client struct {
 func NewClient() (c *Client) {
 	c = &Client{
 		Stop:   make(chan bool, 1),
-		Update: make(chan bool, 1),
+		Update: make(chan struct{ Register, Quantity uint16 }, 1),
 		Data:   make(chan ClientData, 1),
 	}
 	return
@@ -47,38 +47,40 @@ func (c *Client) Listen(connection string, polling, timeout time.Duration) (err 
 	c.timeout = timeout
 
 	go c.receiver()
-	c.Update <- true
+
+	// TODO registers should be a parameter in the config file
+	for _, v := range []struct{ Register, Quantity uint16 }{
+		{Register: uint16(18), Quantity: uint16(1)},
+		{Register: uint16(768), Quantity: uint16(1)},
+		{Register: uint16(4176), Quantity: uint16(2)},
+		{Register: uint16(4096), Quantity: uint16(59)},
+	} {
+		go func(x struct{ Register, Quantity uint16 }) {
+			c.Update <- x
+		}(v)
+	}
 	return
 }
 
 // receiver is the Modbus Gateway data receiver
 func (c *Client) receiver() {
-	retryTime := c.ticker / 10
-	if retryTime < time.Second {
-		retryTime = time.Second
-	}
-
-	// initialize timer for repetition in case of error
-	retry := time.NewTimer(retryTime)
-	defer retry.Stop()
-	retry.Stop() // is only activated in the event of an error!
-
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
 
 	for {
+		var request struct{ Register, Quantity uint16 }
+
 		select {
 		case <-c.Stop:
 			infolog.Println("modbus gateway go function is stopped...")
 			return
-		case <-retry.C:
-			debuglog.Println("get a retry request")
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
-		case <-c.Update:
-			debuglog.Println("get an update request")
+			request.Register = 4096
+			request.Quantity = 59
+		case request = <-c.Update:
+			debuglog.Printf("get an update request (register %v, quantity %v)\n", request.Register, request.Quantity)
 		}
-		retry.Stop()
 		startTime := time.Now()
 
 		var err error
@@ -89,9 +91,6 @@ func (c *Client) receiver() {
 		func() {
 			done := make(chan bool, 1)
 			defer close(done)
-
-			timerOutTimer := time.NewTimer(c.timeout)
-			defer timerOutTimer.Stop()
 
 			// fills register map with received values or set variable err with error information
 			go func() {
@@ -108,64 +107,52 @@ func (c *Client) receiver() {
 				}()
 
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
-				request := []string{
-					c.connectionString + "/readholdingregisters?Address=18&Quantity=1",
-					c.connectionString + "/readholdingregisters?Address=768&Quantity=1",
-					c.connectionString + "/readholdingregisters?Address=4176&Quantity=2",
-					c.connectionString + "/readholdingregisters?Address=4096&Quantity=59"}
-				for i, connectionString := range request {
-					if c.init && i < 3 {
-						continue
+				connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
+				debuglog.Printf("performing http get: %v\n", connectionString)
+				var resp *http.Response
+				if resp, err = http.Get(connectionString); err != nil {
+					return
+				}
+
+				bodyBytes, _ := ioutil.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+
+				// Convert response body to result struct
+				type body struct {
+					Time       time.Time
+					Duration   int
+					Connection string
+					Data       struct {
+						Address, Quantity uint16
+						Data              string
 					}
-					debuglog.Printf("performing http get: %v\n", connectionString)
-					resp, err := http.Get(connectionString)
-					if err != nil {
+				}
+
+				var bodyStruct body
+				if err = json.Unmarshal(bodyBytes, &bodyStruct); err != nil {
+					return
+				}
+				tracelog.Printf("api response: %+v\n", bodyStruct)
+
+				for i := 0; i < int(bodyStruct.Data.Quantity); i++ {
+					var value uint64
+					if value, err = strconv.ParseUint(bodyStruct.Data.Data[i*4:i*4+4], 16, 16); err != nil {
 						return
 					}
-
-					bodyBytes, _ := ioutil.ReadAll(resp.Body)
-					_ = resp.Body.Close()
-
-					// Convert response body to result struct
-					type body struct {
-						Time       time.Time
-						Duration   int
-						Connection string
-						Data       struct {
-							Address, Quantity uint16
-							Data              string
-						}
-					}
-
-					var bodyStruct body
-					if err = json.Unmarshal(bodyBytes, &bodyStruct); err != nil {
-						return
-					}
-					tracelog.Printf("api response: %+v\n", bodyStruct)
-
-					for i := 0; i < int(bodyStruct.Data.Quantity); i++ {
-						value, err := strconv.ParseUint(bodyStruct.Data.Data[i*4:i*4+4], 16, 16)
-						if err != nil {
-							return
-						}
-						register[bodyStruct.Data.Address+uint16(i)] = uint16(value)
-					}
+					register[bodyStruct.Data.Address+uint16(i)] = uint16(value)
 				}
 			}()
 
 			// wait for API Data
 			select {
 			case <-done:
-			case <-timerOutTimer.C:
+			case <-time.After(c.timeout):
 				err = errors.New("timeout during receive data")
 			}
 		}()
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
-			tracelog.Println("start retry timer")
-			retry.Reset(retryTime)
-			continue
 		}
 
 		d := ClientData{
@@ -175,7 +162,6 @@ func (c *Client) receiver() {
 		}
 		tracelog.Printf("send data to client channel: %+v\n", d)
 		c.Data <- d
-		c.init = true
 	}
 }
 

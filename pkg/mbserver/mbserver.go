@@ -1,6 +1,7 @@
 package mbserver
 
 import (
+	"SmartmeterEmu/pkg/debug"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -14,35 +15,40 @@ import (
 // Server is a Modbus slave with allocated memory for discrete inputs, coils, etc.
 
 type DeviceChannels struct {
-	Update chan bool
+	//	Update chan bool
+	Update chan struct{ Register, Quantity uint16 }
 	Done   map[*chan bool]chan bool
 }
 
 type Server struct {
 	sync.RWMutex
 	handler *mbmaster.Server
+	timeout time.Duration
 	Devices map[uint8]DeviceChannels
-	D       map[uint8]struct {
-		Update   chan bool
-		RChannel map[*chan bool]chan bool
-	}
 }
 
 // NewServer creates a new Modbus server (slave).
 func NewServer() *Server {
 	// Allocate Modbus memory maps.
-
 	s := Server{
 		handler: mbmaster.NewServer(),
+		timeout: time.Second,
 		Devices: map[uint8]DeviceChannels{},
 	}
 
+	// deviceid will be created automatically when  mbmaster.NewServer()
 	s.Devices[1] = DeviceChannels{
-		Update: make(chan bool, 1),
+		Update: make(chan struct{ Register, Quantity uint16 }, 1),
 		Done:   map[*chan bool]chan bool{},
 	}
 
 	return &s
+}
+
+func (s *Server) SetTimeOut(t time.Duration) {
+	s.timeout = t
+	debug.Debuglog.Printf("timeout value %v\n", s.timeout)
+
 }
 
 func (s *Server) ListenRTU(port io.ReadWriteCloser) error {
@@ -64,7 +70,7 @@ func (s *Server) NewDevice(id uint8) (err error) {
 		return
 	}
 	s.Devices[id] = DeviceChannels{
-		Update: make(chan bool, 1),
+		Update: make(chan struct{ Register, Quantity uint16 }, 1),
 		Done:   map[*chan bool]chan bool{},
 	}
 	return
@@ -79,7 +85,7 @@ func (s *Server) RemoveDevice(id uint8) (err error) {
 	return
 }
 
-func (s *Server) SetHoldingRegisters(id uint8, register, value uint16) error {
+func (s *Server) SetHoldingRegister(id uint8, register, value uint16) error {
 	if _, ok := s.handler.Devices[id]; !ok {
 		return fmt.Errorf("deviceid %v doesn't exists", id)
 	}
@@ -88,7 +94,7 @@ func (s *Server) SetHoldingRegisters(id uint8, register, value uint16) error {
 	return nil
 }
 
-func (s *Server) GetHoldingRegisters(id uint8, register uint16) (uint16, error) {
+func (s *Server) GetHoldingRegister(id uint8, register uint16) (uint16, error) {
 	if _, ok := s.handler.Devices[id]; !ok {
 		return 0, fmt.Errorf("deviceid %v doesn't exists", id)
 	}
@@ -104,45 +110,62 @@ func registerAddressAndNumber(frame mbmaster.Framer) (register int, numRegs int,
 	return register, numRegs, endRegister
 }
 
-func (s *Server) SetNewFunction3Handler() {
-	ReadHoldingRegisters := func(mb *mbmaster.Server, frame mbmaster.Framer) ([]byte, *mbmaster.Exception) {
-		register, numRegs, endRegister := registerAddressAndNumber(frame)
-		device := frame.GetDevice()
+func (s *Server) SetRegisterFunctionHandler(function uint8) error {
+	var registerhandlerfunction func(*mbmaster.Server, mbmaster.Framer) ([]byte, *mbmaster.Exception)
 
-		if endRegister > 65536 {
-			errorlog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Registeraddress: %v\n", device, register, numRegs, endRegister)
-			return []byte{}, &mbmaster.IllegalDataAddress
-		}
+	switch function {
+	case 3:
+		registerhandlerfunction = func(mb *mbmaster.Server, frame mbmaster.Framer) ([]byte, *mbmaster.Exception) {
+			register, numRegs, endRegister := registerAddressAndNumber(frame)
+			device := frame.GetDevice()
 
-		if _, ok := mb.Devices[device]; !ok {
-			errorlog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: SlaveDeviceFailure, Invalid DeviceId: %v\n", device, register, numRegs, device)
-			return []byte{}, &mbmaster.SlaveDeviceFailure
-		}
+			if endRegister > 65536 {
+				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Registeraddress: %v\n", device, register, numRegs, endRegister)
+				return []byte{}, &mbmaster.IllegalDataAddress
+			}
 
-		debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
-		// TODO: send address and quantity to receiver, the receiver decides if the register should update in realtime
-		if device != 2 || numRegs >= 500 {
-			ready := make(chan bool)
-			defer close(ready)
+			if _, ok := mb.Devices[device]; !ok {
+				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: SlaveDeviceFailure, Invalid DeviceId: %v\n", device, register, numRegs, device)
+				return []byte{}, &mbmaster.SlaveDeviceFailure
+			}
 
-			uid := &ready
-			s.Devices[device].Done[uid] = ready
+			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
+			done := make(chan bool)
+			defer func() {
+				close(done)
+				debug.Debuglog.Printf("close server channel: server.Devices[%v]Done\n", device)
 
-			s.Devices[device].Update <- true
-			// TODO configure timeout
+			}()
+
+			uid := &done
+			s.Devices[device].Done[uid] = done
+			debug.Debuglog.Printf("create server channel: server.Devices[%v].[%v]Done\n", device, uid)
+
+			s.Devices[device].Update <- struct{ Register, Quantity uint16 }{Register: uint16(register), Quantity: uint16(numRegs)}
+			debug.Debuglog.Printf("timeout value %v\n", s.timeout)
+
 			select {
-			case <-ready:
-			case <-time.After(5 * time.Second):
+			case <-done:
+				debug.Debuglog.Printf("get done signal")
+			case <-time.After(s.timeout):
+				debug.Errorlog.Println("timeout during receive data")
+
 			}
 			delete(s.Devices[device].Done, uid)
-		}
-		s.RLock()
-		defer s.RUnlock()
+			debug.Debuglog.Printf("delete server channel: server.Devices[%v].[%v]Done\n", device, uid)
 
-		r := append([]byte{byte(numRegs * 2)}, mbmaster.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
-		tracelog.Printf("response %v\n", hex.EncodeToString(r))
-		return r, &mbmaster.Success
+			s.RLock()
+			defer s.RUnlock()
+
+			r := append([]byte{byte(numRegs * 2)}, mbmaster.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
+			tracelog.Printf("response %v\n", hex.EncodeToString(r))
+			return r, &mbmaster.Success
+		}
 	}
 
-	s.handler.RegisterFunctionHandler(3, ReadHoldingRegisters)
+	if registerhandlerfunction == nil {
+		return fmt.Errorf("functioncode %v is not supported", function)
+	}
+	s.handler.RegisterFunctionHandler(function, registerhandlerfunction)
+	return nil
 }

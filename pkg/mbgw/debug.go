@@ -66,7 +66,7 @@ const (
 	Fatal
 
 	// initial values for the standard logger
-	Default = Warning | Info | Error | Fatal
+	Standard = Warning | Info | Error | Fatal
 
 	// initial values for the standard logger
 	Full = Warning | Info | Error | Fatal | Debug | Trace
@@ -82,7 +82,7 @@ var (
 )
 
 func init() {
-	SetDebug(os.Stderr, Default)
+	SetDebug(os.Stderr, Standard)
 }
 
 func SetDebug(w io.Writer, flag int) {

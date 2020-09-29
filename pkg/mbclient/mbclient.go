@@ -49,16 +49,6 @@ func (c *Client) Listen(ipaddress string, polling, timeout time.Duration) (err e
 
 // receiver is the Modbus Client data receiver
 func (c *Client) receiver() {
-	retryTime := c.ticker / 10
-	if retryTime < time.Second {
-		retryTime = time.Second
-	}
-
-	// initialize timer for repetition in case of error
-	retry := time.NewTimer(retryTime)
-	defer retry.Stop()
-	retry.Stop() // initialize timer for repetition in case of error
-
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
 
@@ -67,28 +57,22 @@ func (c *Client) receiver() {
 		case <-c.Stop:
 			infolog.Println("modbus client go function is stopped...")
 			return
-		case <-retry.C:
-			debuglog.Println("get a retry request")
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
 		case <-c.Update:
 			debuglog.Println("get an update request")
 		}
 
-		retry.Stop()
 		start := time.Now()
 
-		var data []byte
 		var err error
+		var data []byte
 
 		// A function ensures that all channels and timers are ended after one run
 		// a defer is only called at the end of a function and not after the end of a loop!
 		func() {
 			done := make(chan bool, 1)
 			defer close(done)
-
-			timerOutTimer := time.NewTimer(c.timeout)
-			defer timerOutTimer.Stop()
 
 			// fills register map with received values or set variable err with error information
 			go func() {
@@ -105,28 +89,27 @@ func (c *Client) receiver() {
 				}()
 
 				clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
+				// TODO inly deviceid 1 is supported
 				if err = clientHandler.Connect(); err != nil {
 					return
 				}
 				defer clientHandler.Close()
 
 				client := mbslave.NewClient(clientHandler)
+				// TODO registers should be a parameter in the config file
 				data, err = client.ReadHoldingRegisters(41000-1, 39)
 			}()
 
 			// wait for Modbus Data
 			select {
 			case <-done:
-			case <-timerOutTimer.C:
+			case <-time.After(c.timeout):
 				err = errors.New("timeout during receive data")
 			}
 		}()
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
-			tracelog.Println("start retry timer")
-			retry.Reset(retryTime)
-			continue
 		}
 
 		d := ClientData{

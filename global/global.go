@@ -17,6 +17,11 @@ import (
 // but we keep the correct syntax.
 const VERSION = "1.0.11+20200929"
 
+const (
+	Polling = iota
+	Request
+)
+
 type Register struct {
 	Address uint16
 	Format  int
@@ -33,41 +38,30 @@ type RegisterMap struct {
 }
 
 type ClientConfig struct {
-	Type       string
-	Connection string
-	TimeOut    time.Duration
-	Polling    time.Duration
-	DeviceId   uint8
-	Register   map[string]RegisterMap
-}
-type Configuration struct {
-	Debug struct {
-		File io.WriteCloser
-		Flag int
-	}
-	Clients      map[string]ClientConfig
-	ModbusClient ModbusClient
-	ModbusServer ModbusServer
-	Register     map[string]RegisterMap
-}
-
-type ModbusClient struct {
-	Connection    string
-	IpAddress     string
-	DeviceId      byte
-	TimeOut       time.Duration
-	PollingPeriod time.Duration
+	Type        string
+	Connection  string
+	Mode        int
+	TimeOut     time.Duration
+	PollingRate time.Duration
+	DeviceId    uint8
+	Register    map[string]RegisterMap
 }
 
 type ModbusServer struct {
-	Name       string
 	Connection string
-	DeviceId   byte
-	CheckId    byte
-	CheckCrc   bool
+	TimeOut    time.Duration
+	Options    serial.OpenOptions
+}
 
-	TimeOut time.Duration
-	Options serial.OpenOptions
+type Configuration struct {
+	Debug struct {
+		File    io.WriteCloser
+		Flag    int
+		Package map[string]int
+	}
+	Clients      map[string]ClientConfig
+	ModbusServer ModbusServer
+	Register     map[string]RegisterMap
 }
 
 // Config holds the global configuration
@@ -76,12 +70,14 @@ var Config Configuration
 func init() {
 	Config = Configuration{
 		Debug: struct {
-			File io.WriteCloser
-			Flag int
-		}{},
+			File    io.WriteCloser
+			Flag    int
+			Package map[string]int
+		}{
+			Package: map[string]int{},
+		},
 		Clients:      map[string]ClientConfig{},
-		ModbusClient: ModbusClient{},
 		ModbusServer: ModbusServer{},
-		Register:     nil,
+		Register:     map[string]RegisterMap{},
 	}
 }

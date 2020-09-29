@@ -1,7 +1,6 @@
 package config
 
 import (
-	"SmartmeterEmu/pkg/debug"
 	"flag"
 	"fmt"
 	"log"
@@ -11,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/jacobsa/go-serial/serial"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"SmartmeterEmu/global"
+	"SmartmeterEmu/pkg/debug"
 )
 
 const (
@@ -32,17 +31,18 @@ const (
 func init() {
 	type yamlStruct struct {
 		Debug struct {
-			File string
-			Flag string
+			File    string
+			Flag    string
+			Package map[string]string
 		}
 		Clients map[string]struct {
-			Type       string
-			Connection string
-			Polling    int
-			DeviceId   uint8
-			Register   map[string]global.RegisterMap
+			Type        string
+			Connection  string
+			Mode        string
+			PollingRate int
+			DeviceId    uint8
+			Register    map[string]global.RegisterMap
 		}
-		ModbusClient global.ModbusClient
 		ModbusServer global.ModbusServer
 		Register     map[string]global.RegisterMap
 	}
@@ -51,7 +51,7 @@ func init() {
 
 	flag.Bool("version", false, "print version and exit")
 	flag.String("debug.file", "stderr", "log file eg. /tmp/emu.log")
-	flag.String("debug.flag", "standard", "enable debug information (standard | trace | debug)")
+	flag.String("debug.flag", "", "enable debug information (standard | trace | debug)")
 	flag.String("config", "", "Config File eg. /opt/womat/config.yaml")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -62,9 +62,6 @@ func init() {
 		fmt.Printf("Version: %v\n", global.VERSION)
 		os.Exit(0)
 	}
-
-	// PollingPeriod in second, Type is int!
-	configFile.ModbusClient.PollingPeriod = 1
 
 	if f := viper.GetString("config"); f != "" {
 		viper.SetConfigFile(f)
@@ -84,6 +81,7 @@ func init() {
 
 	// split the config string into a register structure
 	for name, register := range configFile.Register {
+		//TODO registers should not be global, each client needs register config
 		register.ClientReg = getRegisterConfig(register.ClientReg, register.Client)
 		register.ServerReg = getRegisterConfig(register.ServerReg, register.Server)
 		configFile.Register[name] = register
@@ -102,27 +100,25 @@ func init() {
 			configFile.ModbusServer.Options.DataBits,
 			p,
 			configFile.ModbusServer.Options.StopBits,
-			configFile.ModbusServer.DeviceId,
 			configFile.ModbusServer.TimeOut = getServerConnection(configFile.ModbusServer.Connection)
 		configFile.ModbusServer.Options.ParityMode = parity[p]
 	}
-	configFile.ModbusClient.IpAddress,
-		configFile.ModbusClient.DeviceId,
-		configFile.ModbusClient.TimeOut = getClientConnection(configFile.ModbusClient.Connection)
 
-	viper.WatchConfig()
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.Println("Config file changed:", e.Name)
-		// TODO config neu laden
-	})
+	getDebugFlag := func(flag string) int {
+		switch flag {
+		case "trace":
+			return debug.Full
+		case "debug":
+			return debug.Warning | debug.Info | debug.Error | debug.Fatal | debug.Debug
+		case "standard":
+			return debug.Standard
+		}
+		return 0
+	}
 
-	switch configFile.Debug.Flag {
-	case "trace":
-		global.Config.Debug.Flag = debug.Full
-	case "debug":
-		global.Config.Debug.Flag = debug.Warning | debug.Info | debug.Error | debug.Fatal | debug.Debug
-	default:
-		global.Config.Debug.Flag = debug.Default
+	global.Config.Debug.Flag = getDebugFlag(configFile.Debug.Flag)
+	for n, p := range configFile.Debug.Package {
+		global.Config.Debug.Package[n] = getDebugFlag(p)
 	}
 
 	switch file := configFile.Debug.File; file {
@@ -141,29 +137,32 @@ func init() {
 	}
 
 	for n, c := range configFile.Clients {
-		connection, deviceId, timeOut := getClientConnection(c.Connection)
+		connection, _, timeOut := getClientConnection(c.Connection)
 		polling := 60 * time.Second
-		if p := time.Duration(c.Polling); p > 0 {
+		mode := global.Polling
+		if p := time.Duration(c.PollingRate); p > 0 {
 			polling = p * time.Second
 		}
 
+		if c.Mode == "request" {
+			mode = global.Request
+		}
 		global.Config.Clients[n] = global.ClientConfig{
-			Type:       c.Type,
-			Connection: connection,
-			TimeOut:    timeOut,
-			Polling:    polling,
-			DeviceId:   deviceId,
-			Register:   c.Register,
+			Type:        c.Type,
+			Connection:  connection,
+			TimeOut:     timeOut,
+			Mode:        mode,
+			PollingRate: polling,
+			DeviceId:    c.DeviceId,
+			Register:    c.Register,
 		}
 	}
 	global.Config.Register = configFile.Register
 	global.Config.ModbusServer = configFile.ModbusServer
-	global.Config.ModbusClient = configFile.ModbusClient
 	return
 }
 
-func getServerConnection(config string) (portName string, baudRate uint, dataBits uint, parity string, stopBit uint, DeviceId byte, TimeOut time.Duration) {
-	DeviceId = 1
+func getServerConnection(config string) (portName string, baudRate uint, dataBits uint, parity string, stopBit uint, TimeOut time.Duration) {
 	TimeOut = time.Second
 
 	m := make(map[string]string)
@@ -196,8 +195,6 @@ func getServerConnection(config string) (portName string, baudRate uint, dataBit
 	for p, v := range m {
 		i, _ := strconv.Atoi(v)
 		switch p {
-		case "DeviceId":
-			DeviceId = byte(i)
 		case "Timeout":
 			TimeOut = time.Duration(i) * time.Millisecond
 		}
@@ -220,6 +217,7 @@ func getClientConnection(config string) (IpAddress string, DeviceId byte, TimeOu
 			IpAddress = field
 		}
 		if regexp.MustCompile(`^https?:\/\/.*$`).MatchString(field) {
+			//TODO redundant character escape '\/' in regexp
 			IpAddress = field
 		}
 		// split fields into a map, eg DeviceId:1 >> m[DeviceId]=1
@@ -235,7 +233,9 @@ func getClientConnection(config string) (IpAddress string, DeviceId byte, TimeOu
 		i, _ := strconv.Atoi(v)
 		switch p {
 		case "DeviceId":
-			DeviceId = byte(i)
+			if i > 0 && i < 248 {
+				DeviceId = byte(i)
+			}
 		case "Timeout":
 			TimeOut = time.Duration(i) * time.Millisecond
 		}
