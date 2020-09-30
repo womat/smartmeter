@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/viper"
 
 	"SmartmeterEmu/global"
-	"SmartmeterEmu/pkg/debug"
 )
 
 const (
@@ -107,11 +106,11 @@ func init() {
 	getDebugFlag := func(flag string) int {
 		switch flag {
 		case "trace":
-			return debug.Full
+			return Full
 		case "debug":
-			return debug.Warning | debug.Info | debug.Error | debug.Fatal | debug.Debug
+			return Warning | Info | Error | Fatal | Debug
 		case "standard":
-			return debug.Standard
+			return Standard
 		}
 		return 0
 	}
@@ -131,7 +130,7 @@ func init() {
 			_ = CreateFile(file)
 		}
 		if global.Config.Debug.File, err = os.Open(file); err != nil {
-			debug.Fatallog.Println(err)
+			fatallog.Println(err)
 			os.Exit(0)
 		}
 	}

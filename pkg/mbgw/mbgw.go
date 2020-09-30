@@ -99,7 +99,7 @@ func (c *Client) receiver() {
 					// recover from panic caused by writing to a closed channel
 					defer func() {
 						if r := recover(); r != nil {
-							errorlog.Printf("error write to closed channel: %v", r)
+							errorlog.Printf("error write to closed channel: %v\n", r)
 							return
 						}
 					}()

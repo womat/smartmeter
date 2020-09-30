@@ -1,7 +1,6 @@
 package mbserver
 
 import (
-	"SmartmeterEmu/pkg/debug"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -47,8 +46,6 @@ func NewServer() *Server {
 
 func (s *Server) SetTimeOut(t time.Duration) {
 	s.timeout = t
-	debug.Debuglog.Printf("timeout value %v\n", s.timeout)
-
 }
 
 func (s *Server) ListenRTU(port io.ReadWriteCloser) error {
@@ -131,28 +128,21 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
 			done := make(chan bool)
-			defer func() {
-				close(done)
-				debug.Debuglog.Printf("close server channel: server.Devices[%v]Done\n", device)
-
-			}()
+			defer close(done)
 
 			uid := &done
 			s.Devices[device].Done[uid] = done
-			debug.Debuglog.Printf("create server channel: server.Devices[%v].[%v]Done\n", device, uid)
 
 			s.Devices[device].Update <- struct{ Register, Quantity uint16 }{Register: uint16(register), Quantity: uint16(numRegs)}
-			debug.Debuglog.Printf("timeout value %v\n", s.timeout)
 
 			select {
 			case <-done:
-				debug.Debuglog.Printf("get done signal")
+				debuglog.Printf("get done signal\n")
 			case <-time.After(s.timeout):
-				debug.Errorlog.Println("timeout during receive data")
-
+				errorlog.Println("timeout during receive data")
 			}
+
 			delete(s.Devices[device].Done, uid)
-			debug.Debuglog.Printf("delete server channel: server.Devices[%v].[%v]Done\n", device, uid)
 
 			s.RLock()
 			defer s.RUnlock()

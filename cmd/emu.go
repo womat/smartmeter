@@ -99,7 +99,7 @@ func main() {
 			c := clientHandler{client: mbclient.NewClient(), deviceId: client.DeviceId, mode: client.Mode}
 			defer c.client.Close()
 			if err := c.client.Listen(client.Connection, client.PollingRate, client.TimeOut); err != nil {
-				debug.Errorlog.Printf("error to start modbus client %v: %v", client.Connection, err)
+				debug.Errorlog.Printf("error to start modbus client %v: %v\n", client.Connection, err)
 				return
 			}
 			go c.handler(ModBusServer)
@@ -107,17 +107,18 @@ func main() {
 			c := mbgwClientHandler{client: mbgw.NewClient(), deviceId: client.DeviceId, mode: client.Mode}
 			defer c.client.Close()
 			if err := c.client.Listen(client.Connection, client.PollingRate, client.TimeOut); err != nil {
-				debug.Errorlog.Printf("error to start modbus gateway client %v: %v", client.Connection, err)
+				debug.Errorlog.Printf("error to start modbus gateway client %v: %v\n", client.Connection, err)
 			}
 			go c.handler(ModBusServer)
 		case "fritz!powerline":
-			debug.Warninglog.Printf("client type %v is not supported", t)
+			debug.Warninglog.Printf("client type %v is not supported\n", t)
 		default:
-			debug.Warninglog.Printf("client type %v is not supported", t)
+			debug.Warninglog.Printf("client type %v is not supported\n", t)
 		}
 	}
 
-	time.Sleep(5 * time.Second)
+	// wait until all devices are initialized
+	time.Sleep(global.Config.ModbusServer.TimeOut)
 	// TODO  support multiple connection strings from config file
 	err = ModBusServer.ListenTCP("127.0.0.1:502")
 	if err != nil {
@@ -148,7 +149,7 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 				continue
 			}
 		case stream := <-client.Data:
-			debug.Debuglog.Printf("receive client data from modbus client receiver (%v bytes)", len(stream.Data))
+			debug.Debuglog.Printf("receive client data from modbus client receiver (%v bytes)\n", len(stream.Data))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 
 			server.Lock()
@@ -201,24 +202,21 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 				}
 
 				setHoldingRegister(server, handler.deviceId, r.ServerReg.Address, value)
-				/*
-					switch value.(type) {
-					case uint16, int16:
-						v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
-						debug.Tracelog.Printf("%v: %v", n, v)
-					case uint32, int32:
-						v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
-						v1, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+1)
-						debug.Tracelog.Printf("%v: %v", n, uint32(v1)|uint32(v)<<16)
-					case uint64, int64:
-						v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
-						v1, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+1)
-						v2, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+2)
-						v3, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+3)
-						debug.Tracelog.Printf("%v: %v", n, uint64(v3)|uint64(v2)<<16|uint64(v1)<<32|uint64(v)<<48)
-					}
-
-				*/
+				switch value.(type) {
+				case uint16, int16:
+					v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
+					debug.Tracelog.Printf("%v: %v\n", n, v)
+				case uint32, int32:
+					v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
+					v1, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+1)
+					debug.Tracelog.Printf("%v: %v", n, uint32(v1)|uint32(v)<<16)
+				case uint64, int64:
+					v, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address)
+					v1, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+1)
+					v2, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+2)
+					v3, _ := server.GetHoldingRegister(handler.deviceId, r.ServerReg.Address+3)
+					debug.Tracelog.Printf("%v: %v\n", n, uint64(v3)|uint64(v2)<<16|uint64(v1)<<32|uint64(v)<<48)
+				}
 			}
 			server.Unlock()
 		}
@@ -227,7 +225,7 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 		for n, c := range server.Devices[handler.deviceId].Done {
 			waitGroup.Add(1)
 
-			go func(name *chan bool, channel chan bool) {
+			go func(name *chan bool, done chan bool) {
 				defer waitGroup.Done()
 				defer func() {
 					// recover from panic caused by writing to a closed channel
@@ -239,8 +237,9 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 					}
 				}()
 
-				debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
-				channel <- true
+				debug.Debuglog.Printf("send done to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
+				done <- true
+				//close(channel)
 			}(n, c)
 		}
 		waitGroup.Wait()
@@ -261,7 +260,7 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 				continue
 			}
 		case stream := <-client.Data:
-			debug.Debuglog.Printf("receive client data from modbus gateway receiver (%v Registers)", len(stream.Register))
+			debug.Debuglog.Printf("receive client data from modbus gateway receiver (%v Registers)\n", len(stream.Register))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 
 			server.Lock()
@@ -274,7 +273,6 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 		}
 
 		var waitGroup sync.WaitGroup
-		debug.Debuglog.Printf("Number of Done Queue %v\n", len(server.Devices[handler.deviceId].Done))
 
 		for n, c := range server.Devices[handler.deviceId].Done {
 			waitGroup.Add(1)
@@ -291,9 +289,9 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 					}
 				}()
 
-				debug.Tracelog.Printf("send completion of update to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
-				debug.Debuglog.Printf("send completion of update to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
+				debug.Debuglog.Printf("send done to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
 				channel <- true
+				//close(channel)
 			}(n, c)
 		}
 		waitGroup.Wait()
