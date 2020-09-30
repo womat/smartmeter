@@ -123,7 +123,7 @@ func init() {
 	switch file := configFile.Debug.File; file {
 	case "stderr":
 		global.Config.Debug.File = os.Stderr
-	case "stdeout":
+	case "stdout":
 		global.Config.Debug.File = os.Stdout
 	default:
 		if !FileExists(file) {
