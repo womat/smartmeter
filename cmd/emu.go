@@ -75,7 +75,7 @@ func main() {
 	serialReadWriteCloser := framereader.NewReadWriteCloser(port, time.Second, 10*time.Millisecond)
 	defer serialReadWriteCloser.Close()
 
-	ModBusServer := mbserver.New()
+	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
 	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
 	if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
