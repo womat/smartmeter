@@ -23,11 +23,18 @@ type Device struct {
 	Update chan Request
 }
 
+type DeviceChannels struct {
+	//	Update chan bool
+	Update chan struct{ Register, Quantity uint16 }
+	Done   map[*chan bool]chan bool
+}
+
 type Server struct {
 	sync.RWMutex
 	handler *modbusserver.Server
 	timeout time.Duration
-	Devices map[uint8]Device
+	Devices map[uint8]DeviceChannels
+	//	Devices map[uint8]Device
 }
 
 // NewServer creates a new Modbus server (slave).
@@ -36,13 +43,19 @@ func NewServer() *Server {
 	s := Server{
 		handler: modbusserver.NewServer(),
 		timeout: time.Second,
-		Devices: map[uint8]Device{},
+		Devices: map[uint8]DeviceChannels{},
+		//		Devices: map[uint8]Device{},
 	}
 
 	// deviceid will be created automatically when  mbmaster.NewServer()
-	s.Devices[1] = Device{
-		Update: make(chan Request),
+	s.Devices[1] = DeviceChannels{
+		Update: make(chan struct{ Register, Quantity uint16 }, 1),
+		Done:   map[*chan bool]chan bool{},
 	}
+
+	//s.Devices[1] = Device{
+	//		Update: make(chan Request,1),
+	//	}
 
 	return &s
 }
@@ -69,7 +82,11 @@ func (s *Server) NewDevice(id uint8) (err error) {
 	if err = s.handler.NewDevice(id); err != nil {
 		return
 	}
-	s.Devices[id] = Device{Update: make(chan Request)}
+	s.Devices[id] = DeviceChannels{
+		Update: make(chan struct{ Register, Quantity uint16 }, 1),
+		Done:   map[*chan bool]chan bool{},
+	}
+	//s.Devices[id] = Device{Update: make(chan Request)}
 	return
 }
 
@@ -108,30 +125,28 @@ func registerAddressAndNumber(frame modbusserver.Framer) (register int, numRegs 
 }
 
 func (s *Server) SetRegisterFunctionHandler(function uint8) error {
-	var registerhandlerfunction func(*modbusserver.Server, modbusserver.Framer) ([]byte, *modbusserver.Exception)
+	var registerhandlerfunction func(*modbusserver.Server, modbusserver.Framer) ([]byte, modbusserver.Exception)
 
 	switch function {
 	case 3:
-		registerhandlerfunction = func(mb *modbusserver.Server, frame modbusserver.Framer) ([]byte, *modbusserver.Exception) {
+		registerhandlerfunction = func(mb *modbusserver.Server, frame modbusserver.Framer) ([]byte, modbusserver.Exception) {
 			register, numRegs, endRegister := registerAddressAndNumber(frame)
 			device := frame.GetDevice()
 
 			if endRegister > 65536 {
 				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Registeraddress: %v\n", device, register, numRegs, endRegister)
-				return []byte{}, &modbusserver.IllegalDataAddress
-			}
-
-			if _, ok := mb.Devices[device]; !ok {
-				errorlog.Printf("invalid deviceId: %v\n", device)
-				// TODO ignore request if unknown deviceid >> response == InternalError
-				return []byte{}, &modbusserver.SlaveDeviceFailure
+				return []byte{}, modbusserver.IllegalDataAddress
 			}
 
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
+			fmt.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
 
 			done := make(chan bool)
 			defer close(done)
-			s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
+			s.Devices[device].Update <- struct{ Register, Quantity uint16 }{Register: uint16(register), Quantity: uint16(numRegs)}
+
+			//	s.Devices[1].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
+			//	s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
 
 			select {
 			case <-done:
@@ -145,7 +160,7 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 
 			r := append([]byte{byte(numRegs * 2)}, modbusserver.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
 			tracelog.Printf("response %v\n", hex.EncodeToString(r))
-			return r, &modbusserver.Success
+			return r, modbusserver.Success
 		}
 	}
 

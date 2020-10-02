@@ -9,6 +9,6 @@ require (
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
-	github.com/womat/mbserver v0.0.4
+	github.com/womat/mbserver v0.0.5
 	github.com/womat/framereader v0.0.14
 )

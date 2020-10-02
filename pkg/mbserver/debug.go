@@ -1,7 +1,6 @@
 package mbserver
 
 import (
-	"github.com/womat/mbserver"
 	"io"
 	"io/ioutil"
 	"log"
@@ -84,7 +83,6 @@ var (
 
 func init() {
 	SetDebug(os.Stderr, Standard)
-	mbserver.SetDebug(os.Stderr, mbserver.Default)
 }
 
 func SetDebug(w io.Writer, flag int) {

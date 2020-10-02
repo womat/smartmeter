@@ -9,7 +9,7 @@ import (
 	"github.com/jacobsa/go-serial/serial"
 
 	"github.com/womat/framereader"
-	mbmaster "github.com/womat/mbserver"
+	modbusserver "github.com/womat/mbserver"
 
 	"SmartmeterEmu/global"
 	_ "SmartmeterEmu/pkg/config"
@@ -58,7 +58,7 @@ func main() {
 		return debug.Standard
 	}
 	framereader.SetDebug(global.Config.Debug.File, getDebugflag("framereader"))
-	mbmaster.SetDebug(global.Config.Debug.File, getDebugflag("mbmaster"))
+	modbusserver.SetDebug(global.Config.Debug.File, getDebugflag("modbusserver"))
 	mbserver.SetDebug(global.Config.Debug.File, getDebugflag("mbserver"))
 	mbclient.SetDebug(global.Config.Debug.File, getDebugflag("mbclient"))
 	mbgw.SetDebug(global.Config.Debug.File, getDebugflag("mbgw"))
@@ -142,7 +142,8 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 		var request mbserver.Request
 
 		select {
-		case request = <-server.Devices[handler.deviceId].Update:
+
+		case <-server.Devices[1].Update:
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus client receiver")
@@ -251,7 +252,7 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 		var request mbserver.Request
 
 		select {
-		case request = <-server.Devices[handler.deviceId].Update:
+		case <-server.Devices[handler.deviceId].Update:
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus gateway receiver")

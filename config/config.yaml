@@ -14,7 +14,7 @@ debug:
     mbgw: standard
     config: standard
     debug: standard
-    mbmaster: standard
+    modbusserver: standard
     framereader: standard
 clients:
   # key >> name of device
