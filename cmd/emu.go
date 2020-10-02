@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/jacobsa/go-serial/serial"
@@ -75,7 +76,7 @@ func main() {
 	serialReadWriteCloser := framereader.NewReadWriteCloser(port, time.Second, 10*time.Millisecond)
 	defer serialReadWriteCloser.Close()
 
-	ModBusServer := mbserver.New()
+	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
 	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
 	if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
@@ -139,10 +140,8 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 	client := handler.client
 
 	for {
-		var request mbserver.Request
-
 		select {
-		case request = <-server.Devices[handler.deviceId].Update:
+		case <-server.Devices[handler.deviceId].Update:
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus client receiver")
@@ -222,24 +221,28 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if request.Done == nil {
-			return
+		var waitGroup sync.WaitGroup
+		for n, c := range server.Devices[handler.deviceId].Done {
+			waitGroup.Add(1)
+
+			go func(name *chan bool, done chan bool) {
+				defer waitGroup.Done()
+				defer func() {
+					// recover from panic caused by writing to a closed channel
+					if r := recover(); r != nil {
+						err := fmt.Errorf("%v", r)
+						debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]Done: %v\n", handler.deviceId, name, err)
+						delete(server.Devices[handler.deviceId].Done, name)
+						return
+					}
+				}()
+
+				debug.Debuglog.Printf("send done to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
+				done <- true
+				//close(channel)
+			}(n, c)
 		}
-
-		go func() {
-			defer func() {
-				// recover from panic caused by writing to a closed channel
-				if r := recover(); r != nil {
-					err := fmt.Errorf("%v", r)
-					debug.Errorlog.Printf("error write to closed channel server.Devices[%v].Done: %v\n", handler.deviceId, err)
-					return
-				}
-			}()
-			defer close(request.Done)
-
-			debug.Debuglog.Printf("send done to server channel: server.Update[%v].Done\n", handler.deviceId)
-			request.Done <- true
-		}()
+		waitGroup.Wait()
 	}
 }
 
@@ -248,14 +251,12 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 	client := handler.client
 
 	for {
-		var request mbserver.Request
-
 		select {
-		case request = <-server.Devices[handler.deviceId].Update:
+		case request := <-server.Devices[handler.deviceId].Update:
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus gateway receiver")
-				client.Update <- struct{ Register, Quantity uint16 }{request.Register, request.Quantity}
+				client.Update <- request
 				continue
 			}
 		case stream := <-client.Data:
@@ -271,24 +272,29 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if request.Done == nil {
-			return
+		var waitGroup sync.WaitGroup
+
+		for n, c := range server.Devices[handler.deviceId].Done {
+			waitGroup.Add(1)
+
+			go func(name *chan bool, channel chan bool) {
+				defer waitGroup.Done()
+				defer func() {
+					// recover from panic caused by writing to a closed channel
+					if r := recover(); r != nil {
+						err := fmt.Errorf("%v", r)
+						debug.Errorlog.Printf("error write to closed channel server.Devices[%v].[%v]Done: %v\n", handler.deviceId, name, err)
+						delete(server.Devices[handler.deviceId].Done, name)
+						return
+					}
+				}()
+
+				debug.Debuglog.Printf("send done to server channel: server.Devices[%v].[%v]Done\n", handler.deviceId, name)
+				channel <- true
+				//close(channel)
+			}(n, c)
 		}
-
-		go func() {
-			defer func() {
-				// recover from panic caused by writing to a closed channel
-				if r := recover(); r != nil {
-					err := fmt.Errorf("%v", r)
-					debug.Errorlog.Printf("error write to closed channel server.Update[%v].Done: %v\n", handler.deviceId, err)
-					return
-				}
-			}()
-			defer close(request.Done)
-
-			debug.Debuglog.Printf("send done to server channel: server.Update[%v].Done\n", handler.deviceId)
-			request.Done <- true
-		}()
+		waitGroup.Wait()
 	}
 }
 
