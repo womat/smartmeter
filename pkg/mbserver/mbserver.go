@@ -23,18 +23,11 @@ type Device struct {
 	Update chan Request
 }
 
-type DeviceChannels struct {
-	//	Update chan bool
-	Update chan struct{ Register, Quantity uint16 }
-	Done   map[*chan bool]chan bool
-}
-
 type Server struct {
 	sync.RWMutex
 	handler *modbusserver.Server
 	timeout time.Duration
-	Devices map[uint8]DeviceChannels
-	//	Devices map[uint8]Device
+	Devices map[uint8]Device
 }
 
 // NewServer creates a new Modbus server (slave).
@@ -43,19 +36,13 @@ func NewServer() *Server {
 	s := Server{
 		handler: modbusserver.NewServer(),
 		timeout: time.Second,
-		Devices: map[uint8]DeviceChannels{},
-		//		Devices: map[uint8]Device{},
+		Devices: map[uint8]Device{},
 	}
 
 	// deviceid will be created automatically when  mbmaster.NewServer()
-	s.Devices[1] = DeviceChannels{
-		Update: make(chan struct{ Register, Quantity uint16 }, 1),
-		Done:   map[*chan bool]chan bool{},
+	s.Devices[1] = Device{
+		Update: make(chan Request, 1),
 	}
-
-	//s.Devices[1] = Device{
-	//		Update: make(chan Request,1),
-	//	}
 
 	return &s
 }
@@ -82,11 +69,8 @@ func (s *Server) NewDevice(id uint8) (err error) {
 	if err = s.handler.NewDevice(id); err != nil {
 		return
 	}
-	s.Devices[id] = DeviceChannels{
-		Update: make(chan struct{ Register, Quantity uint16 }, 1),
-		Done:   map[*chan bool]chan bool{},
-	}
-	//s.Devices[id] = Device{Update: make(chan Request)}
+
+	s.Devices[id] = Device{Update: make(chan Request)}
 	return
 }
 
@@ -139,14 +123,11 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 			}
 
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
-			fmt.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
 
 			done := make(chan bool)
-			defer close(done)
-			s.Devices[device].Update <- struct{ Register, Quantity uint16 }{Register: uint16(register), Quantity: uint16(numRegs)}
+			//defer close(done)
 
-			//	s.Devices[1].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
-			//	s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
+			s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
 
 			select {
 			case <-done:

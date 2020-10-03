@@ -17,13 +17,12 @@ import (
 
 func TestMbserver(t *testing.T) {
 
-	debug.SetDebug(global.Config.Debug.File, debug.Trace)
-	framereader.SetDebug(global.Config.Debug.File, debug.Trace)
-	modbusserver.SetDebug(global.Config.Debug.File, debug.Trace)
-	mbserver.SetDebug(global.Config.Debug.File, debug.Trace)
-	mbclient.SetDebug(global.Config.Debug.File, debug.Trace)
-	mbgw.SetDebug(global.Config.Debug.File, debug.Trace)
-	debug.SetDebug(global.Config.Debug.File, debug.Trace)
+	debug.SetDebug(global.Config.Debug.File, debug.Warning|debug.Info|debug.Error|debug.Fatal|debug.Debug)
+	framereader.SetDebug(global.Config.Debug.File, debug.Full)
+	modbusserver.SetDebug(global.Config.Debug.File, debug.Standard)
+	mbserver.SetDebug(global.Config.Debug.File, debug.Warning|debug.Info|debug.Error|debug.Fatal|debug.Debug)
+	mbclient.SetDebug(global.Config.Debug.File, debug.Warning|debug.Info|debug.Error|debug.Fatal|debug.Debug)
+	mbgw.SetDebug(global.Config.Debug.File, debug.Full)
 
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
@@ -44,13 +43,13 @@ func TestMbserver(t *testing.T) {
 	}
 	go c.handler(ModBusServer)
 
-	time.Sleep(time.Second)
+	time.Sleep(100 * time.Millisecond)
+
 	if err := ModBusServer.ListenTCP("127.0.0.1:502"); err != nil {
 		debug.Errorlog.Printf("error to listen tcp port %v: %v\n", "", err)
 		t.FailNow()
 		return
 	}
-	time.Sleep(100 * time.Millisecond)
 
 	// Client
 	handler := modbus.NewTCPClientHandler("127.0.0.1:502")
@@ -68,5 +67,5 @@ func TestMbserver(t *testing.T) {
 		t.Errorf("expected nil, got %v\n", err)
 		t.FailNow()
 	}
-	fmt.Printf("%v", results)
+	fmt.Printf(">>>>>>>>>>>>>>>%v\n", results)
 }

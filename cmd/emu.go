@@ -136,21 +136,25 @@ func main() {
 
 // handler receives row data from receiver and save ist to modbus register
 func (handler *clientHandler) handler(server *mbserver.Server) {
+	var request mbserver.Request
 	client := handler.client
+	channelOpen := false
 
 	for {
-		var request mbserver.Request
-
 		select {
-
-		case <-server.Devices[1].Update:
+		case request = <-server.Devices[handler.deviceId].Update:
+			channelOpen = true
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus client receiver")
 				client.Update <- true
 				continue
 			}
-		case stream := <-client.Data:
+		case stream, more := <-client.Data:
+			if !more {
+				debug.Infolog.Println("modbus handler go function is stopped...")
+				return
+			}
 			debug.Debuglog.Printf("receive client data from modbus client receiver (%v bytes)\n", len(stream.Data))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 
@@ -223,8 +227,8 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if request.Done == nil {
-			return
+		if !channelOpen {
+			continue
 		}
 
 		go func() {
@@ -232,34 +236,40 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 				// recover from panic caused by writing to a closed channel
 				if r := recover(); r != nil {
 					err := fmt.Errorf("%v", r)
-					debug.Errorlog.Printf("error write to closed channel server.Devices[%v].Done: %v\n", handler.deviceId, err)
+					debug.Errorlog.Printf("error write to closed channel server.Update[%v].Done: %v\n", handler.deviceId, err)
 					return
 				}
 			}()
-			defer close(request.Done)
 
 			debug.Debuglog.Printf("send done to server channel: server.Update[%v].Done\n", handler.deviceId)
+			channelOpen = false
 			request.Done <- true
+			close(request.Done)
 		}()
 	}
 }
 
 // handler receives row data from receiver and save ist to modbus register
 func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
+	var request mbserver.Request
 	client := handler.client
+	channelOpen := false
 
 	for {
-		var request mbserver.Request
-
 		select {
-		case <-server.Devices[handler.deviceId].Update:
+		case request = <-server.Devices[handler.deviceId].Update:
+			channelOpen = true
 			debug.Debuglog.Println("get an update request from modbus server")
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus gateway receiver")
 				client.Update <- struct{ Register, Quantity uint16 }{request.Register, request.Quantity}
 				continue
 			}
-		case stream := <-client.Data:
+		case stream, more := <-client.Data:
+			if !more {
+				debug.Infolog.Println("modbus gateway handler go function is stopped...")
+				return
+			}
 			debug.Debuglog.Printf("receive client data from modbus gateway receiver (%v Registers)\n", len(stream.Register))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 
@@ -272,25 +282,12 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if request.Done == nil {
-			return
-		}
-
-		go func() {
-			defer func() {
-				// recover from panic caused by writing to a closed channel
-				if r := recover(); r != nil {
-					err := fmt.Errorf("%v", r)
-					debug.Errorlog.Printf("error write to closed channel server.Update[%v].Done: %v\n", handler.deviceId, err)
-					return
-				}
-			}()
-			defer close(request.Done)
-
+		if channelOpen {
 			debug.Debuglog.Printf("send done to server channel: server.Update[%v].Done\n", handler.deviceId)
+			channelOpen = false
 			request.Done <- true
-		}()
-
+			close(request.Done)
+		}
 	}
 }
 
