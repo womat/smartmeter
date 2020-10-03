@@ -89,7 +89,9 @@ func (c *Client) receiver() {
 				}()
 
 				clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
-				// TODO inly deviceid 1 is supported
+				// TODO only deviceid 1 is supported
+				clientHandler.SlaveId = 1
+
 				if err = clientHandler.Connect(); err != nil {
 					return
 				}
