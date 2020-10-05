@@ -42,8 +42,13 @@ func init() {
 			DeviceId    uint8
 			Register    map[string]global.RegisterMap
 		}
-		ModbusServer global.ModbusServer
-		Register     map[string]global.RegisterMap
+		ModbusServer struct {
+			Connection string
+			TimeOut    time.Duration
+			Mode       string
+			Options    serial.OpenOptions
+		}
+		Register map[string]global.RegisterMap
 	}
 
 	var configFile yamlStruct
@@ -157,7 +162,16 @@ func init() {
 		}
 	}
 	global.Config.Register = configFile.Register
-	global.Config.ModbusServer = configFile.ModbusServer
+	global.Config.ModbusServer = global.ModbusServer{
+		Connection: configFile.ModbusServer.Connection,
+		TimeOut:    configFile.ModbusServer.TimeOut,
+		Mode:       global.Polling,
+		Options:    configFile.ModbusServer.Options,
+	}
+
+	if configFile.ModbusServer.Mode == "request" {
+		global.Config.ModbusServer.Mode = global.Request
+	}
 	return
 }
 

@@ -73,6 +73,9 @@ func (c *Client) receiver() {
 		select {
 		case <-c.Stop:
 			infolog.Println("modbus gateway go function is stopped...")
+			close(c.Stop)
+			close(c.Update)
+			close(c.Data)
 			return
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
@@ -90,7 +93,6 @@ func (c *Client) receiver() {
 		// a defer is only called at the end of a function and not after the end of a loop!
 		func() {
 			done := make(chan bool, 1)
-			defer close(done)
 
 			// fills register map with received values or set variable err with error information
 			go func() {
@@ -104,6 +106,7 @@ func (c *Client) receiver() {
 						}
 					}()
 					done <- true
+					close(done)
 				}()
 
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
@@ -153,6 +156,7 @@ func (c *Client) receiver() {
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
+			continue
 		}
 
 		d := ClientData{
@@ -168,9 +172,5 @@ func (c *Client) receiver() {
 func (c *Client) Close() (err error) {
 	infolog.Println("stop modbus gateway go function")
 	c.Stop <- true
-
-	close(c.Stop)
-	close(c.Update)
-	close(c.Data)
 	return
 }

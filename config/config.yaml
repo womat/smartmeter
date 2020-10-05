@@ -72,6 +72,10 @@ clients:
         server: 'Addr:4176 Value:88888888 uint32'
 
 modbusserver:
+  #   mode: (default polling)
+  #         request >> The current Modbus registers are updated for each request
+  #         polling >> for each request, the current Modbus registers are read out without updating the data.
+  mode: request
   #  connection: connectionstring eg: RTU /dev/ttyS0,9600,8,N,1 Timeout:200 (timeout in ms (default 1000ms)
   #     Timeout: in ms (default 1000ms), Timeout for client response (if client mode = request)
   connection: RTU com3,9600,8,N,1 Timeout:5000

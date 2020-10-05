@@ -78,9 +78,12 @@ func main() {
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
 	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
-	if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
-		debug.Errorlog.Printf("error to set register function handler: %v\n", err)
-		return
+
+	if global.Config.ModbusServer.Mode == global.Request {
+		if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
+			debug.Errorlog.Printf("error to set register function handler: %v\n", err)
+			return
+		}
 	}
 
 	for _, client := range global.Config.Clients {

@@ -15,7 +15,7 @@ import (
 //
 // VERSION differs from semantic versioning as described in https://semver.org/
 // but we keep the correct syntax.
-const VERSION = "1.0.14+20201002"
+const VERSION = "1.0.15+20201005"
 
 const (
 	Polling = iota
@@ -50,6 +50,7 @@ type ClientConfig struct {
 type ModbusServer struct {
 	Connection string
 	TimeOut    time.Duration
+	Mode       int
 	Options    serial.OpenOptions
 }
 
