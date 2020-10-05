@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	"SmartmeterEmu/global"
+	"SmartmeterEmu/pkg/tools"
 )
 
 const (
@@ -46,7 +46,10 @@ func init() {
 			Connection string
 			TimeOut    time.Duration
 			Mode       string
-			Options    serial.OpenOptions
+			Rs485      struct {
+				Interframedelay int
+			}
+			Options serial.OpenOptions
 		}
 		Register map[string]global.RegisterMap
 	}
@@ -90,23 +93,6 @@ func init() {
 		register.ServerReg = getRegisterConfig(register.ServerReg, register.Server)
 		configFile.Register[name] = register
 	}
-	{
-		// split the connection string into am modbus client/server structure
-		var p string
-		parity := map[string]serial.ParityMode{
-			"N": serial.PARITY_NONE,
-			"O": serial.PARITY_ODD,
-			"E": serial.PARITY_EVEN,
-		}
-
-		configFile.ModbusServer.Options.PortName,
-			configFile.ModbusServer.Options.BaudRate,
-			configFile.ModbusServer.Options.DataBits,
-			p,
-			configFile.ModbusServer.Options.StopBits,
-			configFile.ModbusServer.TimeOut = getServerConnection(configFile.ModbusServer.Connection)
-		configFile.ModbusServer.Options.ParityMode = parity[p]
-	}
 
 	getDebugFlag := func(flag string) int {
 		switch flag {
@@ -131,8 +117,8 @@ func init() {
 	case "stdout":
 		global.Config.Debug.File = os.Stdout
 	default:
-		if !FileExists(file) {
-			_ = CreateFile(file)
+		if !tools.FileExists(file) {
+			_ = tools.CreateFile(file)
 		}
 		if global.Config.Debug.File, err = os.Open(file); err != nil {
 			fatallog.Println(err)
@@ -141,7 +127,6 @@ func init() {
 	}
 
 	for n, c := range configFile.Clients {
-		connection, _, timeOut := getClientConnection(c.Connection)
 		polling := 60 * time.Second
 		mode := global.Polling
 		if p := time.Duration(c.PollingRate); p > 0 {
@@ -153,107 +138,25 @@ func init() {
 		}
 		global.Config.Clients[n] = global.ClientConfig{
 			Type:        c.Type,
-			Connection:  connection,
-			TimeOut:     timeOut,
+			Connection:  c.Connection,
 			Mode:        mode,
 			PollingRate: polling,
 			DeviceId:    c.DeviceId,
 			Register:    c.Register,
 		}
 	}
+
 	global.Config.Register = configFile.Register
-	global.Config.ModbusServer = global.ModbusServer{
-		Connection: configFile.ModbusServer.Connection,
-		TimeOut:    configFile.ModbusServer.TimeOut,
-		Mode:       global.Polling,
-		Options:    configFile.ModbusServer.Options,
+	global.Config.ModbusServer.Connection = configFile.ModbusServer.Connection
+	global.Config.ModbusServer.Options = configFile.ModbusServer.Options
+
+	if t := configFile.ModbusServer.Rs485.Interframedelay; t > 0 {
+		global.Config.ModbusServer.Rs485.Interframedelay = time.Duration(t) * time.Millisecond
 	}
 
 	if configFile.ModbusServer.Mode == "request" {
 		global.Config.ModbusServer.Mode = global.Request
 	}
-	return
-}
-
-func getServerConnection(config string) (portName string, baudRate uint, dataBits uint, parity string, stopBit uint, TimeOut time.Duration) {
-	TimeOut = time.Second
-
-	m := make(map[string]string)
-	fields := strings.Fields(config)
-
-	for _, field := range fields {
-		// check for connection string and split it into fields
-		// eg "RTU /dev/ttyS0,9600,8,N,1 DeviceId:1 Timeout:1"
-		if regexp.MustCompile(`^[0-9A-Za-z:/.\-]*,[0-9]{1,5},[5678],[NEO],[12]$`).MatchString(field) {
-			f := strings.Split(field, ",")
-			portName = f[0]
-			b, _ := strconv.Atoi(f[1])
-			baudRate = uint(b)
-			b, _ = strconv.Atoi(f[2])
-			dataBits = uint(b)
-			parity = f[3]
-			b, _ = strconv.Atoi(f[4])
-			stopBit = uint(b)
-		}
-
-		// split fields into a map, eg DeviceId:1 >> m[DeviceId]=1
-		parts := strings.Split(field, ":")
-		if len(parts) == 2 {
-			m[parts[0]] = parts[1]
-			continue
-		}
-		m[parts[0]] = ""
-	}
-
-	for p, v := range m {
-		i, _ := strconv.Atoi(v)
-		switch p {
-		case "Timeout":
-			TimeOut = time.Duration(i) * time.Millisecond
-		}
-	}
-
-	return
-}
-
-func getClientConnection(config string) (IpAddress string, DeviceId byte, TimeOut time.Duration) {
-	DeviceId = 1
-	TimeOut = time.Second
-
-	m := make(map[string]string)
-	fields := strings.Fields(config)
-
-	for _, field := range fields {
-		// check if connection string is valid
-		// eg "192.0.2.10:502"
-		if regexp.MustCompile(`^[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}:[\d]{1,5}$`).MatchString(field) {
-			IpAddress = field
-		}
-		if regexp.MustCompile(`^https?:\/\/.*$`).MatchString(field) {
-			//TODO redundant character escape '\/' in regexp
-			IpAddress = field
-		}
-		// split fields into a map, eg DeviceId:1 >> m[DeviceId]=1
-		parts := strings.Split(field, ":")
-		if len(parts) == 2 {
-			m[parts[0]] = parts[1]
-			continue
-		}
-		m[parts[0]] = ""
-	}
-
-	for p, v := range m {
-		i, _ := strconv.Atoi(v)
-		switch p {
-		case "DeviceId":
-			if i > 0 && i < 248 {
-				DeviceId = byte(i)
-			}
-		case "Timeout":
-			TimeOut = time.Duration(i) * time.Millisecond
-		}
-	}
-
 	return
 }
 
@@ -429,23 +332,3 @@ func getRegisterConfig(reg global.Register, config string) global.Register {
 
 	log.Println(x)
 */
-
-func FileExists(name string) bool {
-	if _, err := os.Stat(name); err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
-}
-
-func CreateFile(name string) error {
-	fo, err := os.Create(name)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		fo.Close()
-	}()
-	return nil
-}

@@ -87,7 +87,7 @@ func TestMbserver(t *testing.T) {
 
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
-	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
+	ModBusServer.SetTimeOut(time.Second * 5)
 
 	if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
 		t.Fatalf("error to set register function handler: %v\n", err)
@@ -97,7 +97,7 @@ func TestMbserver(t *testing.T) {
 
 	c := clientHandler{client: mbclient.NewClient(), deviceId: 1, mode: global.Request}
 	defer c.client.Close()
-	if err := c.client.Listen("127.0.0.1:3333", time.Second*300, time.Second); err != nil {
+	if err := c.client.Listen("127.0.0.1:3333 Timeout:1000", time.Second*300); err != nil {
 		t.Fatalf("error to start modbus client 127.0.0.1:3333: %v\n", err)
 		t.FailNow()
 
@@ -201,7 +201,7 @@ func TestMbserverPolling(t *testing.T) {
 
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
-	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
+	ModBusServer.SetTimeOut(time.Second * 5)
 
 	if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
 		t.Fatalf("error to set register function handler: %v\n", err)
@@ -211,7 +211,7 @@ func TestMbserverPolling(t *testing.T) {
 
 	c := clientHandler{client: mbclient.NewClient(), deviceId: 1, mode: global.Polling}
 	defer c.client.Close()
-	if err := c.client.Listen("127.0.0.1:3333", time.Second*300, time.Second); err != nil {
+	if err := c.client.Listen("127.0.0.1:3333 Timeout:1000", time.Second*300); err != nil {
 		t.Fatalf("error to start modbus client 127.0.0.1:3333: %v\n", err)
 		t.FailNow()
 

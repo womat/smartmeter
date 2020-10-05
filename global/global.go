@@ -15,7 +15,7 @@ import (
 //
 // VERSION differs from semantic versioning as described in https://semver.org/
 // but we keep the correct syntax.
-const VERSION = "1.0.15+20201005"
+const VERSION = "1.0.16+20201005"
 
 const (
 	Polling = iota
@@ -41,7 +41,6 @@ type ClientConfig struct {
 	Type        string
 	Connection  string
 	Mode        int
-	TimeOut     time.Duration
 	PollingRate time.Duration
 	DeviceId    uint8
 	Register    map[string]RegisterMap
@@ -49,9 +48,11 @@ type ClientConfig struct {
 
 type ModbusServer struct {
 	Connection string
-	TimeOut    time.Duration
 	Mode       int
-	Options    serial.OpenOptions
+	Rs485      struct {
+		Interframedelay time.Duration
+	}
+	Options serial.OpenOptions
 }
 
 type Configuration struct {
@@ -77,8 +78,13 @@ func init() {
 		}{
 			Package: map[string]int{},
 		},
-		Clients:      map[string]ClientConfig{},
-		ModbusServer: ModbusServer{},
-		Register:     map[string]RegisterMap{},
+		Clients: map[string]ClientConfig{},
+		ModbusServer: ModbusServer{
+			Mode: Polling,
+			Rs485: struct {
+				Interframedelay time.Duration
+			}{Interframedelay: 4 * time.Millisecond},
+		},
+		Register: map[string]RegisterMap{},
 	}
 }

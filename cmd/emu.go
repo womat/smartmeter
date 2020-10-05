@@ -17,6 +17,7 @@ import (
 	"SmartmeterEmu/pkg/mbclient"
 	"SmartmeterEmu/pkg/mbgw"
 	"SmartmeterEmu/pkg/mbserver"
+	"SmartmeterEmu/pkg/tools"
 )
 
 const (
@@ -65,19 +66,38 @@ func main() {
 	debug.SetDebug(global.Config.Debug.File, getDebugflag("main"))
 
 	// initialize modbus server
-	port, err := serial.Open(global.Config.ModbusServer.Options)
+	var ModbusServerTimeOut time.Duration
+	serialOption := global.Config.ModbusServer.Options
+	{
+		// split the connection string into am modbus client/server structure
+		var p string
+		parity := map[string]serial.ParityMode{
+			"N": serial.PARITY_NONE,
+			"O": serial.PARITY_ODD,
+			"E": serial.PARITY_EVEN,
+		}
+
+		serialOption.PortName,
+			serialOption.BaudRate,
+			serialOption.DataBits,
+			p,
+			serialOption.StopBits,
+			ModbusServerTimeOut = tools.GetPortSerialTimeOut(global.Config.ModbusServer.Connection)
+		serialOption.ParityMode = parity[p]
+	}
+
+	port, err := serial.Open(serialOption)
 	if err != nil {
 		debug.Errorlog.Printf("error to open serial port %v: %v\n", global.Config.ModbusServer.Options.PortName, err)
 		return
 	}
 
-	//todo timeout and interframedelay from config file
-	serialReadWriteCloser := framereader.NewReadWriteCloser(port, time.Second, 10*time.Millisecond)
+	serialReadWriteCloser := framereader.NewReadWriteCloser(port, ModbusServerTimeOut, global.Config.ModbusServer.Rs485.Interframedelay)
 	defer serialReadWriteCloser.Close()
 
 	ModBusServer := mbserver.NewServer()
 	defer ModBusServer.Close()
-	ModBusServer.SetTimeOut(global.Config.ModbusServer.TimeOut)
+	ModBusServer.SetTimeOut(ModbusServerTimeOut)
 
 	if global.Config.ModbusServer.Mode == global.Request {
 		if err := ModBusServer.SetRegisterFunctionHandler(3); err != nil {
@@ -100,7 +120,7 @@ func main() {
 		case "mbclient":
 			c := clientHandler{client: mbclient.NewClient(), deviceId: client.DeviceId, mode: client.Mode}
 			defer c.client.Close()
-			if err := c.client.Listen(client.Connection, client.PollingRate, client.TimeOut); err != nil {
+			if err := c.client.Listen(client.Connection, client.PollingRate); err != nil {
 				debug.Errorlog.Printf("error to start modbus client %v: %v\n", client.Connection, err)
 				return
 			}
@@ -108,7 +128,7 @@ func main() {
 		case "mbgateway":
 			c := mbgwClientHandler{client: mbgw.NewClient(), deviceId: client.DeviceId, mode: client.Mode}
 			defer c.client.Close()
-			if err := c.client.Listen(client.Connection, client.PollingRate, client.TimeOut); err != nil {
+			if err := c.client.Listen(client.Connection, client.PollingRate); err != nil {
 				debug.Errorlog.Printf("error to start modbus gateway client %v: %v\n", client.Connection, err)
 			}
 			go c.handler(ModBusServer)
@@ -120,7 +140,7 @@ func main() {
 	}
 
 	// wait until all devices are initialized
-	time.Sleep(global.Config.ModbusServer.TimeOut)
+	time.Sleep(ModbusServerTimeOut)
 	// TODO  support multiple connection strings from config file
 	err = ModBusServer.ListenTCP("127.0.0.1:502")
 	if err != nil {

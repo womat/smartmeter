@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"SmartmeterEmu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus gateway
@@ -41,10 +43,9 @@ func NewClient() (c *Client) {
 }
 
 //Listen starts the go function to receive data
-func (c *Client) Listen(connection string, polling, timeout time.Duration) (err error) {
-	c.connectionString = connection
+func (c *Client) Listen(connectionstring string, polling time.Duration) (err error) {
+	c.connectionString, _, c.timeout = tools.GetConnectionDeviceIdTimeOut(connectionstring)
 	c.ticker = polling
-	c.timeout = timeout
 
 	go c.receiver()
 

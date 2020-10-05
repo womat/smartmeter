@@ -5,6 +5,8 @@ import (
 	"time"
 
 	mbslave "github.com/goburrow/modbus"
+
+	"SmartmeterEmu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus client
@@ -19,6 +21,7 @@ type Client struct {
 	connectionString string
 	ticker           time.Duration
 	timeout          time.Duration
+	deviceId         uint8
 	// stop receiving data
 	Stop chan bool
 	// update get data immediately
@@ -37,10 +40,9 @@ func NewClient() (c *Client) {
 }
 
 // Listen starts the go function to receive data
-func (c *Client) Listen(ipaddress string, polling, timeout time.Duration) (err error) {
-	c.connectionString = ipaddress
+func (c *Client) Listen(connectionstring string, polling time.Duration) (err error) {
+	c.connectionString, c.deviceId, c.timeout = tools.GetConnectionDeviceIdTimeOut(connectionstring)
 	c.ticker = polling
-	c.timeout = timeout
 
 	go c.receiver()
 	c.Update <- true
@@ -92,8 +94,7 @@ func (c *Client) receiver() {
 				}()
 
 				clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
-				// TODO only deviceid 1 is supported
-				clientHandler.SlaveId = 1
+				clientHandler.SlaveId = c.deviceId
 
 				if err = clientHandler.Connect(); err != nil {
 					return
