@@ -91,7 +91,8 @@ func (c *Client) receiver() {
 			debuglog.Printf("get an update request (register %v, quantity %v)\n", request.Register, request.Quantity)
 			retryCounter = 0
 		case <-retry:
-			debuglog.Println("get a retry request")
+			// TODO change to debug log
+			errorlog.Println("get a retry request")
 		}
 		startTime := time.Now()
 
@@ -166,11 +167,17 @@ func (c *Client) receiver() {
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
 			if retryCounter < c.maxRetries {
-				debuglog.Println("send an retry request")
+				// TODO change to debug log
+				errorlog.Println("send an retry request")
 				retryCounter++
 				retry <- true
 			}
 			continue
+		}
+
+		// TODO remove it
+		if retryCounter > 0 {
+			errorlog.Println("retry successfully")
 		}
 
 		d := ClientData{

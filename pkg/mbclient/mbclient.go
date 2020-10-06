@@ -22,6 +22,7 @@ type Client struct {
 	ticker           time.Duration
 	timeout          time.Duration
 	deviceId         uint8
+	maxRetries       int
 	// stop receiving data
 	Stop chan bool
 	// update get data immediately
@@ -41,7 +42,7 @@ func NewClient() (c *Client) {
 
 // Listen starts the go function to receive data
 func (c *Client) Listen(connectionstring string, polling time.Duration) (err error) {
-	c.connectionString, c.deviceId, c.timeout = tools.GetConnectionDeviceIdTimeOut(connectionstring)
+	c.connectionString, c.deviceId, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionstring)
 	c.ticker = polling
 
 	go c.receiver()
@@ -51,6 +52,8 @@ func (c *Client) Listen(connectionstring string, polling time.Duration) (err err
 
 // receiver is the Modbus Client data receiver
 func (c *Client) receiver() {
+	var retryCounter int
+	retry := make(chan bool)
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
 
@@ -61,11 +64,17 @@ func (c *Client) receiver() {
 			close(c.Stop)
 			close(c.Update)
 			close(c.Data)
+			close(retry)
 			return
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
+			retryCounter = 0
 		case <-c.Update:
 			debuglog.Println("get an update request")
+			retryCounter = 0
+		case <-retry:
+			// TODO change to debuglog
+			errorlog.Println("get a retry request")
 		}
 
 		start := time.Now()
@@ -116,7 +125,18 @@ func (c *Client) receiver() {
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
+			if retryCounter < c.maxRetries {
+				// TODO change to debuglog
+				errorlog.Println("send an retry request")
+				retryCounter++
+				retry <- true
+			}
 			continue
+		}
+
+		// TODO remove it
+		if retryCounter > 0 {
+			errorlog.Println("retry successfully")
 		}
 
 		d := ClientData{

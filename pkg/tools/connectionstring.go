@@ -48,7 +48,7 @@ func GetPortSerialTimeOut(config string) (portName string, baudRate uint, dataBi
 	return
 }
 
-func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId byte, TimeOut time.Duration) {
+func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId byte, TimeOut time.Duration, MaxRetries int) {
 	DeviceId = 1
 	TimeOut = time.Second
 
@@ -82,6 +82,8 @@ func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId by
 			}
 		case "Timeout":
 			TimeOut = time.Duration(i) * time.Millisecond
+		case "MaxRetries":
+			MaxRetries = i
 		}
 	}
 

@@ -21,21 +21,22 @@ func TestGetConnectionDeviceIdTimeOut(t *testing.T) {
 		connection string
 		deviceId   uint8
 		timeOut    time.Duration
+		maxRetries int
 	}{
-		{"TCP 192.0.2.10:502 DeviceId:2 Timeout:100", "192.0.2.10:502", 2, 100 * time.Millisecond},
-		{"HTTP http://fritz.box Timeout:500", "http://fritz.box", 1, 500 * time.Millisecond},
-		{"HTTP https://fritz.box/abc?t=3 Timeout:500", "https://fritz.box/abc?t=3", 1, 500 * time.Millisecond},
+		{"TCP 192.0.2.10:502 DeviceId:2 Timeout:100 MaxRetries:2", "192.0.2.10:502", 2, 100 * time.Millisecond, 2},
+		{"HTTP http://fritz.box Timeout:500", "http://fritz.box", 1, 500 * time.Millisecond, 0},
+		{"HTTP https://fritz.box/abc?t=3 Timeout:500 MaxRetries:1", "https://fritz.box/abc?t=3", 1, 500 * time.Millisecond, 1},
 	}
 
 	for _, test := range testpattern {
-		c, d, to := GetConnectionDeviceIdTimeOut(test.pattern)
-		if !isEqual(test.connection, c) || !isEqual(test.deviceId, d) || !isEqual(test.timeOut, to) {
-			t.Errorf("expected %v %v %v, got %v %v %v", test.connection, test.deviceId, test.timeOut, c, d, to)
+		c, d, to, r := GetConnectionDeviceIdTimeOut(test.pattern)
+		if !isEqual(test.connection, c) || !isEqual(test.deviceId, d) || !isEqual(test.timeOut, to) || !isEqual(test.maxRetries, r) {
+			t.Errorf("expected %v %v %v %v, got %v %v %v %v", test.connection, test.deviceId, test.timeOut, test.maxRetries, c, d, to, r)
 		}
 	}
 }
 
-func TestPortSerialTimeOutt(t *testing.T) {
+func TestPortSerialTimeOut(t *testing.T) {
 	testpattern := []struct {
 		pattern  string
 		port     string
