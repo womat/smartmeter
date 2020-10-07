@@ -80,45 +80,7 @@ func (c *Client) receiver() {
 		retry.Stop()
 		start := time.Now()
 
-		var err error
-		var data []byte
-
-		// A function ensures that all channels and timers are ended after one run
-		// a defer is only called at the end of a function and not after the end of a loop!
-		func() {
-			done := make(chan bool, 1)
-
-			//  fills register map with received values or set variable err with error information
-			go func() {
-				// ensures that data is sent to the channel when the function is terminated
-				defer func() {
-					select {
-					case done <- true:
-					default:
-					}
-					close(done)
-				}()
-
-				clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
-				clientHandler.SlaveId = c.deviceId
-
-				if err = clientHandler.Connect(); err != nil {
-					return
-				}
-				defer clientHandler.Close()
-
-				client := mbslave.NewClient(clientHandler)
-				// TODO registers should be a parameter in the config file
-				data, err = client.ReadHoldingRegisters(41000-1, 39)
-			}()
-
-			// wait for Modbus Data
-			select {
-			case <-done:
-			case <-time.After(c.timeout):
-				err = errors.New("timeout during receive data")
-			}
-		}()
+		data, err := c.get(41000-1, 39)
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
@@ -138,6 +100,43 @@ func (c *Client) receiver() {
 		tracelog.Printf("send data to client channel: %+v\n", d)
 		c.Data <- d
 	}
+}
+
+func (c *Client) get(address, quantity uint16) (data []byte, err error) {
+	done := make(chan bool, 1)
+
+	//  fills register map with received values or set variable err with error information
+	go func() {
+		// ensures that data is sent to the channel when the function is terminated
+		defer func() {
+			select {
+			case done <- true:
+			default:
+			}
+			close(done)
+		}()
+
+		clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
+		clientHandler.SlaveId = c.deviceId
+
+		if err = clientHandler.Connect(); err != nil {
+			return
+		}
+		defer clientHandler.Close()
+
+		client := mbslave.NewClient(clientHandler)
+		// TODO registers should be a parameter in the config file
+		data, err = client.ReadHoldingRegisters(address, quantity)
+	}()
+
+	// wait for Modbus Data
+	select {
+	case <-done:
+	case <-time.After(c.timeout):
+		err = errors.New("timeout during receive data")
+	}
+
+	return
 }
 
 func (c *Client) Close() (err error) {

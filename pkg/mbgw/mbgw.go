@@ -96,73 +96,9 @@ func (c *Client) receiver() {
 		retry.Stop()
 		startTime := time.Now()
 
-		var err error
-		register := make(map[uint16]uint16)
-
-		// A function ensures that all channels and timers are ended after one run
-		// a defer is only called at the end of a function and not after the end of a loop!
-		func() {
-			done := make(chan bool, 1)
-
-			// fills register map with received values or set variable err with error information
-			go func() {
-				// ensures that data is sent to the channel when the function is terminated
-				defer func() {
-					select {
-					case done <- true:
-					default:
-					}
-					close(done)
-				}()
-
-				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
-				connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
-				if retryCounter > 0 {
-					debuglog.Printf("retry %v: performing http get: %v\n", retryCounter, connectionString)
-				} else {
-					debuglog.Printf("performing http get: %v\n", connectionString)
-				}
-				var resp *http.Response
-				if resp, err = http.Get(connectionString); err != nil {
-					return
-				}
-
-				bodyBytes, _ := ioutil.ReadAll(resp.Body)
-				_ = resp.Body.Close()
-
-				// Convert response body to result struct
-				type body struct {
-					Time       time.Time
-					Duration   int
-					Connection string
-					Data       struct {
-						Address, Quantity uint16
-						Data              string
-					}
-				}
-
-				var bodyStruct body
-				if err = json.Unmarshal(bodyBytes, &bodyStruct); err != nil {
-					return
-				}
-				tracelog.Printf("api response: %+v\n", bodyStruct)
-
-				for i := 0; i < int(bodyStruct.Data.Quantity); i++ {
-					var value uint64
-					if value, err = strconv.ParseUint(bodyStruct.Data.Data[i*4:i*4+4], 16, 16); err != nil {
-						return
-					}
-					register[bodyStruct.Data.Address+uint16(i)] = uint16(value)
-				}
-			}()
-
-			// wait for API Data
-			select {
-			case <-done:
-			case <-time.After(c.timeout):
-				err = errors.New("timeout during receive data")
-			}
-		}()
+		// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
+		connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
+		register, err := c.get(connectionString)
 
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
@@ -182,6 +118,66 @@ func (c *Client) receiver() {
 		tracelog.Printf("send data to client channel: %+v\n", d)
 		c.Data <- d
 	}
+}
+
+func (c *Client) get(connectionString string) (register map[uint16]uint16, err error) {
+	register = make(map[uint16]uint16)
+	done := make(chan bool, 1)
+
+	// fills register map with received values or set variable err with error information
+	go func() {
+		// ensures that data is sent to the channel when the function is terminated
+		defer func() {
+			select {
+			case done <- true:
+			default:
+			}
+			close(done)
+		}()
+
+		debuglog.Printf("performing http get: %v\n", connectionString)
+
+		var resp *http.Response
+		if resp, err = http.Get(connectionString); err != nil {
+			return
+		}
+
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		// Convert response body to result struct
+		type body struct {
+			Time       time.Time
+			Duration   int
+			Connection string
+			Data       struct {
+				Address, Quantity uint16
+				Data              string
+			}
+		}
+
+		var bodyStruct body
+		if err = json.Unmarshal(bodyBytes, &bodyStruct); err != nil {
+			return
+		}
+		tracelog.Printf("api response: %+v\n", bodyStruct)
+
+		for i := 0; i < int(bodyStruct.Data.Quantity); i++ {
+			var value uint64
+			if value, err = strconv.ParseUint(bodyStruct.Data.Data[i*4:i*4+4], 16, 16); err != nil {
+				return
+			}
+			register[bodyStruct.Data.Address+uint16(i)] = uint16(value)
+		}
+	}()
+
+	// wait for API Data
+	select {
+	case <-done:
+	case <-time.After(c.timeout):
+		err = errors.New("timeout during receive data")
+	}
+	return
 }
 
 func (c *Client) Close() (err error) {
