@@ -106,22 +106,12 @@ func (c *Client) receiver() {
 
 			// fills register map with received values or set variable err with error information
 			go func() {
-				//TODO go function kann entfallen wenn am Ende der vorigen function folgende Zeilen hinzugefügt werden
-				//  select {
-				//  case done <- true:
-				//  default:
-				//  }
-				//  close(done)
 				// ensures that data is sent to the channel when the function is terminated
 				defer func() {
-					// recover from panic caused by writing to a closed channel
-					defer func() {
-						if r := recover(); r != nil {
-							errorlog.Printf("error write to closed channel: %v\n", r)
-							return
-						}
-					}()
-					done <- true
+					select {
+					case done <- true:
+					default:
+					}
 					close(done)
 				}()
 

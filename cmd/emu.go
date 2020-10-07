@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -171,7 +170,6 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus client receiver")
 				client.Update <- true
-				fmt.Print(".")
 				continue
 			}
 		case stream, more := <-client.Data:
@@ -179,7 +177,6 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 				debug.Infolog.Println("modbus handler go function is stopped...")
 				return
 			}
-			fmt.Print(":")
 			debug.Debuglog.Printf("receive client data from modbus client receiver (%v bytes)\n", len(stream.Data))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 
@@ -285,7 +282,6 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			if handler.mode == global.Request {
 				debug.Debuglog.Println("send an update request to modbus gateway receiver")
 				client.Update <- struct{ Register, Quantity uint16 }{request.Register, request.Quantity}
-				fmt.Print(".")
 				continue
 			}
 		case stream, more := <-client.Data:
@@ -294,7 +290,6 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 				return
 			}
 
-			fmt.Print(":")
 			debug.Debuglog.Printf("receive client data from modbus gateway receiver (%v Registers)\n", len(stream.Register))
 			debug.Tracelog.Printf("receive client data: %+v\n", stream)
 

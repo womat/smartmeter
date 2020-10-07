@@ -125,14 +125,11 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
 
 			done := make(chan bool)
-			fmt.Printf("%v", device)
 			s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
-			fmt.Print(">")
 
 			select {
 			case <-done:
 				debuglog.Printf("get done signal\n")
-				fmt.Print("<")
 			case <-time.After(s.timeout):
 				errorlog.Println("timeout during receive data")
 			}

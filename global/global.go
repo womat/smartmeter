@@ -15,7 +15,7 @@ import (
 //
 // VERSION differs from semantic versioning as described in https://semver.org/
 // but we keep the correct syntax.
-const VERSION = "1.0.21+20201007"
+const VERSION = "1.0.22+20201008"
 
 const (
 	Polling = iota
