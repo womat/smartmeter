@@ -106,6 +106,12 @@ func (c *Client) receiver() {
 
 			// fills register map with received values or set variable err with error information
 			go func() {
+				//TODO go function kann entfallen wenn am Ende der vorigen function folgende Zeilen hinzugefügt werden
+				//  select {
+				//  case done <- true:
+				//  default:
+				//  }
+				//  close(done)
 				// ensures that data is sent to the channel when the function is terminated
 				defer func() {
 					// recover from panic caused by writing to a closed channel
@@ -122,9 +128,10 @@ func (c *Client) receiver() {
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
 				connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
 				if retryCounter > 0 {
-					warninglog.Printf("retry %v: performing http get: %v\n", retryCounter, connectionString)
+					debuglog.Printf("retry %v: performing http get: %v\n", retryCounter, connectionString)
+				} else {
+					debuglog.Printf("performing http get: %v\n", connectionString)
 				}
-				debuglog.Printf("performing http get: %v\n", connectionString)
 				var resp *http.Response
 				if resp, err = http.Get(connectionString); err != nil {
 					return
@@ -170,17 +177,11 @@ func (c *Client) receiver() {
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
 			if retryCounter < c.maxRetries {
-				// TODO change to debuglog
-				warninglog.Println("send a retry request")
+				debuglog.Println("send a retry request")
 				retryCounter++
 				retry.Reset(10 * time.Millisecond)
 			}
 			continue
-		}
-
-		// TODO remove it
-		if retryCounter > 0 {
-			errorlog.Println("retry successfully")
 		}
 
 		d := ClientData{

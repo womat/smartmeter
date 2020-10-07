@@ -88,8 +88,14 @@ func (c *Client) receiver() {
 		func() {
 			done := make(chan bool, 1)
 
-			// fills register map with received values or set variable err with error information
+			//  fills register map with received values or set variable err with error information
 			go func() {
+				//TODO defer function kann entfallen wenn am Ende der function folgende Zeilen hinzugefügt werden
+				//  select {
+				//  case done <- true:
+				//  default:
+				//  }
+				//  close(done)
 				defer func() {
 					// ensures that data is sent to the channel when the function is terminated
 					defer func() {
@@ -127,17 +133,11 @@ func (c *Client) receiver() {
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
 			if retryCounter < c.maxRetries {
-				// TODO change to debuglog
-				warninglog.Println("send a retry request")
+				debuglog.Println("send a retry request")
 				retryCounter++
 				retry.Reset(10 * time.Millisecond)
 			}
 			continue
-		}
-
-		// TODO remove it
-		if retryCounter > 0 {
-			errorlog.Println("retry successfully")
 		}
 
 		d := ClientData{

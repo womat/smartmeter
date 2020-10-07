@@ -268,27 +268,6 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			}
 			close(request.Done)
 		}
-		/*
-			if !channelOpen {
-				continue
-			}
-
-			go func() {
-				defer func() {
-					// recover from panic caused by writing to a closed channel
-					if r := recover(); r != nil {
-						err := fmt.Errorf("%v", r)
-						debug.Errorlog.Printf("error write to closed channel server.Update[%v].Done: %v\n", handler.deviceId, err)
-						return
-					}
-				}()
-
-				debug.Debuglog.Printf("send done to server channel: server.Update[%v].Done\n", handler.deviceId)
-				channelOpen = false
-				request.Done <- true
-				close(request.Done)
-			}()
-		*/
 	}
 }
 

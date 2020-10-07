@@ -125,7 +125,6 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
 
 			done := make(chan bool)
-			//defer close(done)
 			fmt.Printf("%v", device)
 			s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
 			fmt.Print(">")
