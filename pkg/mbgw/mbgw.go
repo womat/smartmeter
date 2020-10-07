@@ -67,6 +67,8 @@ func (c *Client) Listen(connectionstring string, polling time.Duration) (err err
 // receiver is the Modbus Gateway data receiver
 func (c *Client) receiver() {
 	var retryCounter int
+	var request struct{ Register, Quantity uint16 }
+
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
 	retry := time.NewTicker(time.Millisecond)
@@ -74,8 +76,6 @@ func (c *Client) receiver() {
 	retry.Stop()
 
 	for {
-		var request struct{ Register, Quantity uint16 }
-
 		select {
 		case <-c.Stop:
 			infolog.Println("modbus gateway go function is stopped...")
@@ -122,7 +122,7 @@ func (c *Client) receiver() {
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
 				connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
 				if retryCounter > 0 {
-					warninglog.Printf("retry %v: performing http get: %v\n", connectionString)
+					warninglog.Printf("retry %v: performing http get: %v\n", retryCounter, connectionString)
 				}
 				debuglog.Printf("performing http get: %v\n", connectionString)
 				var resp *http.Response
