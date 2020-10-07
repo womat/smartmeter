@@ -53,9 +53,12 @@ func (c *Client) Listen(connectionstring string, polling time.Duration) (err err
 // receiver is the Modbus Client data receiver
 func (c *Client) receiver() {
 	var retryCounter int
-	retry := make(chan bool)
+	//retry := make(chan bool)
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
+	retry := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	retry.Stop()
 
 	for {
 		select {
@@ -64,7 +67,6 @@ func (c *Client) receiver() {
 			close(c.Stop)
 			close(c.Update)
 			close(c.Data)
-			close(retry)
 			return
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
@@ -72,11 +74,10 @@ func (c *Client) receiver() {
 		case <-c.Update:
 			debuglog.Println("get an update request")
 			retryCounter = 0
-		case <-retry:
-			// TODO change to debuglog
-			errorlog.Println("get a retry request")
+		case <-retry.C:
 		}
 
+		retry.Stop()
 		start := time.Now()
 
 		var err error
@@ -127,9 +128,9 @@ func (c *Client) receiver() {
 			errorlog.Printf("error to receive client data: %v\n", err)
 			if retryCounter < c.maxRetries {
 				// TODO change to debuglog
-				errorlog.Println("send an retry request")
+				warninglog.Println("send a retry request")
 				retryCounter++
-				retry <- true
+				retry.Reset(10 * time.Millisecond)
 			}
 			continue
 		}

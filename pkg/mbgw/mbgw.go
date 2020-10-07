@@ -67,9 +67,11 @@ func (c *Client) Listen(connectionstring string, polling time.Duration) (err err
 // receiver is the Modbus Gateway data receiver
 func (c *Client) receiver() {
 	var retryCounter int
-	retry := make(chan bool)
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
+	retry := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	retry.Stop()
 
 	for {
 		var request struct{ Register, Quantity uint16 }
@@ -80,7 +82,6 @@ func (c *Client) receiver() {
 			close(c.Stop)
 			close(c.Update)
 			close(c.Data)
-			close(retry)
 			return
 		case <-ticker.C:
 			debuglog.Println("get a ticker request")
@@ -90,10 +91,9 @@ func (c *Client) receiver() {
 		case request = <-c.Update:
 			debuglog.Printf("get an update request (register %v, quantity %v)\n", request.Register, request.Quantity)
 			retryCounter = 0
-		case <-retry:
-			// TODO change to debug log
-			errorlog.Println("get a retry request")
+		case <-retry.C:
 		}
+		retry.Stop()
 		startTime := time.Now()
 
 		var err error
@@ -121,6 +121,9 @@ func (c *Client) receiver() {
 
 				// http://raspberryz:8080/readholdingregisters?Address=4096&Quantity=64
 				connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, request.Register, request.Quantity)
+				if retryCounter > 0 {
+					warninglog.Printf("retry %v: performing http get: %v\n", connectionString)
+				}
 				debuglog.Printf("performing http get: %v\n", connectionString)
 				var resp *http.Response
 				if resp, err = http.Get(connectionString); err != nil {
@@ -167,10 +170,10 @@ func (c *Client) receiver() {
 		if err != nil {
 			errorlog.Printf("error to receive client data: %v\n", err)
 			if retryCounter < c.maxRetries {
-				// TODO change to debug log
-				errorlog.Println("send an retry request")
+				// TODO change to debuglog
+				warninglog.Println("send a retry request")
 				retryCounter++
-				retry <- true
+				retry.Reset(10 * time.Millisecond)
 			}
 			continue
 		}

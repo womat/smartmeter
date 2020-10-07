@@ -250,9 +250,9 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 {
+		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
 			debug.Errorlog.Printf("Device: %v AC P: %v", handler.deviceId, p)
-			//setHoldingRegister(server,handler.deviceId,4116,uint32(0))
+			setHoldingRegister(server, handler.deviceId, 4116, uint32(0))
 			continue
 		}
 
@@ -311,7 +311,7 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 {
+		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
 			debug.Errorlog.Printf("Device: %v AC P: %v", handler.deviceId, p)
 			setHoldingRegister(server, handler.deviceId, 4116, uint32(0))
 			continue
@@ -388,9 +388,9 @@ func CheckRegisterValue(server *mbserver.Server, id uint8) error {
 	return nil
 }
 
-func getHoldingregister32(server *mbserver.Server, id uint8, register uint16) (value uint32) {
+func getHoldingregister32(server *mbserver.Server, id uint8, register uint16) (value int32) {
 	v, _ := server.GetHoldingRegister(id, register)
 	v2, _ := server.GetHoldingRegister(id, register+1)
-	value = uint32(v)<<16 | uint32(v2)
+	value = int32(v)<<16 | int32(v2)
 	return value
 }
