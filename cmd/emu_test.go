@@ -1,8 +1,8 @@
 package main
 
 import (
-	mbslave "github.com/goburrow/modbus"
-	modbusserver "github.com/womat/mbserver"
+	mbSlave "github.com/goburrow/modbus"
+	modbusServer "github.com/womat/mbserver"
 
 	"SmartmeterEmu/global"
 	"SmartmeterEmu/pkg/debug"
@@ -25,13 +25,13 @@ func isEqual(a interface{}, b interface{}) bool {
 	return true
 }
 
-func TestMbserver(t *testing.T) {
+func TestMbServer(t *testing.T) {
 
 	testPattern1 := []byte{0, 0, 0, 0, 1, 25, 242, 53, 0, 0, 0, 0, 0, 55, 213, 165, 0, 0, 0, 0, 0, 37, 74, 18, 0, 0, 2, 218, 0, 0, 0, 5, 0, 0, 3, 218, 255, 255, 248, 65, 255, 255, 253, 180, 255, 255, 252, 222, 255, 255, 253, 175, 9, 9, 9, 62, 9, 51, 0, 0, 10, 222, 0, 0, 13, 63, 0, 0, 10, 194, 224, 155, 38, 47, 247, 240, 99, 99}
 
 	debug.SetDebug(global.Config.Debug.File, 0)
 	framereader.SetDebug(global.Config.Debug.File, 0)
-	modbusserver.SetDebug(global.Config.Debug.File, 0)
+	modbusServer.SetDebug(global.Config.Debug.File, 0)
 	mbserver.SetDebug(global.Config.Debug.File, 0)
 	mbclient.SetDebug(global.Config.Debug.File, 0)
 	mbgw.SetDebug(global.Config.Debug.File, 0)
@@ -45,7 +45,7 @@ func TestMbserver(t *testing.T) {
 			mbgw.SetDebug(global.Config.Debug.File, debug.Full)
 
 	*/
-	s := modbusserver.NewServer()
+	s := modbusServer.NewServer()
 	err := s.ListenTCP("127.0.0.1:3333")
 	if err != nil {
 		t.Fatalf("failed to listen, got %v\n", err)
@@ -55,7 +55,7 @@ func TestMbserver(t *testing.T) {
 	time.Sleep(1 * time.Millisecond)
 
 	// Client
-	testSourceHandler := mbslave.NewTCPClientHandler("127.0.0.1:3333")
+	testSourceHandler := mbSlave.NewTCPClientHandler("127.0.0.1:3333")
 	// Connect manually so that multiple requests are handled in one connection session
 	err = testSourceHandler.Connect()
 	if err != nil {
@@ -64,7 +64,7 @@ func TestMbserver(t *testing.T) {
 	}
 	defer testSourceHandler.Close()
 	testSourceHandler.SlaveId = 1
-	testSource := mbslave.NewClient(testSourceHandler)
+	testSource := mbSlave.NewClient(testSourceHandler)
 
 	_, err = testSource.WriteMultipleRegisters(41000-1, uint16(len(testPattern1)/2), testPattern1)
 
@@ -115,7 +115,7 @@ func TestMbserver(t *testing.T) {
 	// Client
 	testPattern2 := []byte{0, 0, 0, 0, 1, 25, 242, 53, 0, 0, 0, 0, 0, 55, 213, 165, 0, 0, 0, 0, 0, 37, 74, 18, 0, 0, 2, 218, 0, 0, 0, 5, 0, 0, 3, 218, 255, 255, 248, 65, 255, 255, 253, 180, 255, 255, 252, 222, 255, 255, 253, 175, 9, 9, 9, 62, 9, 51, 0, 0, 10, 222, 0, 0, 13, 63, 0, 0, 10, 194, 224, 155, 38, 47, 247, 240, 19, 136}
 
-	testSourceHandler = mbslave.NewTCPClientHandler("127.0.0.1:3333")
+	testSourceHandler = mbSlave.NewTCPClientHandler("127.0.0.1:3333")
 	// Connect manually so that multiple requests are handled in one connection session
 	err = testSourceHandler.Connect()
 	if err != nil {
@@ -124,12 +124,12 @@ func TestMbserver(t *testing.T) {
 	}
 	defer testSourceHandler.Close()
 	testSourceHandler.SlaveId = 1
-	testSource = mbslave.NewClient(testSourceHandler)
+	testSource = mbSlave.NewClient(testSourceHandler)
 
 	_, err = testSource.WriteMultipleRegisters(41000-1, uint16(len(testPattern1)/2), testPattern2)
 
 	// Client
-	handler := mbslave.NewTCPClientHandler("127.0.0.1:502")
+	handler := mbSlave.NewTCPClientHandler("127.0.0.1:502")
 	// Connect manually so that multiple requests are handled in one connection session
 	if err := handler.Connect(); err != nil {
 		t.Errorf("failed to connect, got %v\n", err)
@@ -137,7 +137,7 @@ func TestMbserver(t *testing.T) {
 	}
 	defer handler.Close()
 	handler.SlaveId = 1
-	client := mbslave.NewClient(handler)
+	client := mbSlave.NewClient(handler)
 
 	results, err = client.ReadHoldingRegisters(4134, 1)
 	expect = []byte{1, 244}
@@ -149,17 +149,17 @@ func TestMbserver(t *testing.T) {
 
 }
 
-func TestMbserverPolling(t *testing.T) {
+func TestMbServerPolling(t *testing.T) {
 	testPattern1 := []byte{0, 0, 0, 0, 1, 25, 242, 53, 0, 0, 0, 0, 0, 55, 213, 165, 0, 0, 0, 0, 0, 37, 74, 18, 0, 0, 2, 218, 0, 0, 0, 5, 0, 0, 3, 218, 255, 255, 248, 65, 255, 255, 253, 180, 255, 255, 252, 222, 255, 255, 253, 175, 9, 9, 9, 62, 9, 51, 0, 0, 10, 222, 0, 0, 13, 63, 0, 0, 10, 194, 224, 155, 38, 47, 247, 240, 19, 136}
 
 	debug.SetDebug(global.Config.Debug.File, 0)
 	framereader.SetDebug(global.Config.Debug.File, 0)
-	modbusserver.SetDebug(global.Config.Debug.File, 0)
+	modbusServer.SetDebug(global.Config.Debug.File, 0)
 	mbserver.SetDebug(global.Config.Debug.File, 0)
 	mbclient.SetDebug(global.Config.Debug.File, 0)
 	mbgw.SetDebug(global.Config.Debug.File, 0)
 
-	s := modbusserver.NewServer()
+	s := modbusServer.NewServer()
 	err := s.ListenTCP("127.0.0.1:3333")
 	if err != nil {
 		t.Fatalf("failed to listen, got %v\n", err)
@@ -169,7 +169,7 @@ func TestMbserverPolling(t *testing.T) {
 	time.Sleep(1 * time.Millisecond)
 
 	// Client
-	testSourceHandler := mbslave.NewTCPClientHandler("127.0.0.1:3333")
+	testSourceHandler := mbSlave.NewTCPClientHandler("127.0.0.1:3333")
 	// Connect manually so that multiple requests are handled in one connection session
 	err = testSourceHandler.Connect()
 	if err != nil {
@@ -178,7 +178,7 @@ func TestMbserverPolling(t *testing.T) {
 	}
 	defer testSourceHandler.Close()
 	testSourceHandler.SlaveId = 1
-	testSource := mbslave.NewClient(testSourceHandler)
+	testSource := mbSlave.NewClient(testSourceHandler)
 
 	_, err = testSource.WriteMultipleRegisters(41000-1, uint16(len(testPattern1)/2), testPattern1)
 
@@ -229,7 +229,7 @@ func TestMbserverPolling(t *testing.T) {
 	// Client
 	testPattern2 := []byte{0, 0, 0, 0, 1, 25, 242, 53, 0, 0, 0, 0, 0, 55, 213, 165, 0, 0, 0, 0, 0, 37, 74, 18, 0, 0, 2, 218, 0, 0, 0, 5, 0, 0, 3, 218, 255, 255, 248, 65, 255, 255, 253, 180, 255, 255, 252, 222, 255, 255, 253, 175, 9, 9, 9, 62, 9, 51, 0, 0, 10, 222, 0, 0, 13, 63, 0, 0, 10, 194, 224, 155, 38, 47, 247, 240, 99, 99}
 
-	testSourceHandler = mbslave.NewTCPClientHandler("127.0.0.1:3333")
+	testSourceHandler = mbSlave.NewTCPClientHandler("127.0.0.1:3333")
 	// Connect manually so that multiple requests are handled in one connection session
 	err = testSourceHandler.Connect()
 	if err != nil {
@@ -238,12 +238,12 @@ func TestMbserverPolling(t *testing.T) {
 	}
 	defer testSourceHandler.Close()
 	testSourceHandler.SlaveId = 1
-	testSource = mbslave.NewClient(testSourceHandler)
+	testSource = mbSlave.NewClient(testSourceHandler)
 
 	_, err = testSource.WriteMultipleRegisters(41000-1, uint16(len(testPattern1)/2), testPattern2)
 
 	// Client
-	handler := mbslave.NewTCPClientHandler("127.0.0.1:502")
+	handler := mbSlave.NewTCPClientHandler("127.0.0.1:502")
 	// Connect manually so that multiple requests are handled in one connection session
 	if err := handler.Connect(); err != nil {
 		t.Errorf("failed to connect, got %v\n", err)
@@ -251,7 +251,7 @@ func TestMbserverPolling(t *testing.T) {
 	}
 	defer handler.Close()
 	handler.SlaveId = 1
-	client := mbslave.NewClient(handler)
+	client := mbSlave.NewClient(handler)
 
 	results, err = client.ReadHoldingRegisters(4134, 1)
 	expect = []byte{1, 244}

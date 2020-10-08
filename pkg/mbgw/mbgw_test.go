@@ -16,7 +16,7 @@ func isEqual(a interface{}, b interface{}) bool {
 	return true
 }
 
-type testsequenz = struct {
+type tSequence = struct {
 	address  uint16
 	quantity int
 	register []uint16
@@ -25,18 +25,18 @@ type testsequenz = struct {
 
 func TestGet(t *testing.T) {
 	const connection = "HTTP http://raspberryz:8080 Timeout:500 MaxRetries:1"
-	testSequenz := []testsequenz{{address: 18, quantity: 1, register: []uint16{285}},
+	testSequence := []tSequence{{address: 18, quantity: 1, register: []uint16{285}},
 		{address: 768, quantity: 1, register: []uint16{117}},
 		{address: 4176, quantity: 2, register: []uint16{276, 52082}},
 		{address: 4096, quantity: 59, register: []uint16{}}}
 
-	for i, test := range testSequenz {
+	for i, test := range testSequence {
 		test.reg = make(map[uint16]uint16)
 
 		for i, v := range test.register {
 			test.reg[test.address+uint16(i)] = v
 		}
-		testSequenz[i].reg = test.reg
+		testSequence[i].reg = test.reg
 	}
 
 	c := NewClient()
@@ -45,7 +45,7 @@ func TestGet(t *testing.T) {
 		t.FailNow()
 	}
 
-	for _, test := range testSequenz {
+	for _, test := range testSequence {
 		connectionString := fmt.Sprintf("%v/readholdingregisters?Address=%v&Quantity=%v", c.connectionString, test.address, test.quantity)
 		register, err := c.get(connectionString)
 		if err != nil {

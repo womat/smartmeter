@@ -44,8 +44,8 @@ func NewClient() (c *Client) {
 }
 
 //Listen starts the go function to receive data
-func (c *Client) Listen(connectionstring string, polling time.Duration) (err error) {
-	c.connectionString, _, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionstring)
+func (c *Client) Listen(connectionString string, polling time.Duration) (err error) {
+	c.connectionString, _, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionString)
 	c.ticker = polling
 
 	go c.receiver()
