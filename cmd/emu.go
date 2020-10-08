@@ -8,7 +8,7 @@ import (
 	"github.com/jacobsa/go-serial/serial"
 
 	"github.com/womat/framereader"
-	modbusserver "github.com/womat/mbserver"
+	modbusServer "github.com/womat/mbserver"
 
 	"SmartmeterEmu/global"
 	_ "SmartmeterEmu/pkg/config"
@@ -58,7 +58,7 @@ func main() {
 		return debug.Standard
 	}
 	framereader.SetDebug(global.Config.Debug.File, getDebugflag("framereader"))
-	modbusserver.SetDebug(global.Config.Debug.File, getDebugflag("modbusserver"))
+	modbusServer.SetDebug(global.Config.Debug.File, getDebugflag("modbusserver"))
 	mbserver.SetDebug(global.Config.Debug.File, getDebugflag("mbserver"))
 	mbclient.SetDebug(global.Config.Debug.File, getDebugflag("mbclient"))
 	mbgw.SetDebug(global.Config.Debug.File, getDebugflag("mbgw"))
@@ -249,7 +249,7 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
+		if p := getHoldingRegister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
 			debug.Errorlog.Printf("Device: %v AC P: %v", handler.deviceId, p)
 			setHoldingRegister(server, handler.deviceId, 4116, uint32(0))
 			continue
@@ -302,7 +302,7 @@ func (handler *mbgwClientHandler) handler(server *mbserver.Server) {
 			server.Unlock()
 		}
 
-		if p := getHoldingregister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
+		if p := getHoldingRegister32(server, handler.deviceId, 4116); p > 10000000 || p < -10000000 {
 			debug.Errorlog.Printf("Device: %v AC P: %v", handler.deviceId, p)
 			setHoldingRegister(server, handler.deviceId, 4116, uint32(0))
 			continue
@@ -373,17 +373,17 @@ func setHoldingRegister(server *mbserver.Server, id uint8, address uint16, value
 }
 
 func CheckRegisterValue(server *mbserver.Server, id uint8) error {
-	debug.Warninglog.Printf("AC L1 %v", float64(getHoldingregister32(server, id, 4140))/100)
-	debug.Warninglog.Printf("AC L2 %v", float64(getHoldingregister32(server, id, 4142))/100)
-	debug.Warninglog.Printf("AC L3 %v", float64(getHoldingregister32(server, id, 4144))/100)
-	debug.Warninglog.Printf("AC %v", float64(getHoldingregister32(server, id, 4116))/100)
-	debug.Warninglog.Printf("AC E %v", float64(getHoldingregister32(server, id, 4124))/1000)
-	debug.Warninglog.Printf("AC ER %v", float64(getHoldingregister32(server, id, 4126))/1000)
-	debug.Warninglog.Printf("AC E %v", float64(getHoldingregister32(server, id, 4128))/1000)
+	debug.Warninglog.Printf("AC L1 %v", float64(getHoldingRegister32(server, id, 4140))/100)
+	debug.Warninglog.Printf("AC L2 %v", float64(getHoldingRegister32(server, id, 4142))/100)
+	debug.Warninglog.Printf("AC L3 %v", float64(getHoldingRegister32(server, id, 4144))/100)
+	debug.Warninglog.Printf("AC %v", float64(getHoldingRegister32(server, id, 4116))/100)
+	debug.Warninglog.Printf("AC E %v", float64(getHoldingRegister32(server, id, 4124))/1000)
+	debug.Warninglog.Printf("AC ER %v", float64(getHoldingRegister32(server, id, 4126))/1000)
+	debug.Warninglog.Printf("AC E %v", float64(getHoldingRegister32(server, id, 4128))/1000)
 	return nil
 }
 
-func getHoldingregister32(server *mbserver.Server, id uint8, register uint16) (value int32) {
+func getHoldingRegister32(server *mbserver.Server, id uint8, register uint16) (value int32) {
 	v, _ := server.GetHoldingRegister(id, register)
 	v2, _ := server.GetHoldingRegister(id, register+1)
 	value = int32(v)<<16 | int32(v2)

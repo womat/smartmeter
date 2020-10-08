@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	modbusserver "github.com/womat/mbserver"
+	modbusServer "github.com/womat/mbserver"
 )
 
 // Server is a Modbus slave with allocated memory for discrete inputs, coils, etc.
@@ -25,7 +25,7 @@ type Device struct {
 
 type Server struct {
 	sync.RWMutex
-	handler *modbusserver.Server
+	handler *modbusServer.Server
 	timeout time.Duration
 	Devices map[uint8]Device
 }
@@ -34,12 +34,12 @@ type Server struct {
 func NewServer() *Server {
 	// Allocate Modbus memory maps.
 	s := Server{
-		handler: modbusserver.NewServer(),
+		handler: modbusServer.NewServer(),
 		timeout: time.Second,
 		Devices: map[uint8]Device{},
 	}
 
-	// deviceid will be created automatically when  mbmaster.NewServer()
+	// Device[1] will be created automatically when modbusServer.NewServer()
 	s.Devices[1] = Device{
 		Update: make(chan Request, 1),
 	}
@@ -100,7 +100,7 @@ func (s *Server) GetHoldingRegister(id uint8, register uint16) (uint16, error) {
 	return s.handler.Devices[id].HoldingRegisters[register], nil
 }
 
-func registerAddressAndNumber(frame modbusserver.Framer) (register int, numRegs int, endRegister int) {
+func registerAddressAndNumber(frame modbusServer.Framer) (register int, numRegs int, endRegister int) {
 	data := frame.GetData()
 	register = int(binary.BigEndian.Uint16(data[0:2]))
 	numRegs = int(binary.BigEndian.Uint16(data[2:4]))
@@ -109,17 +109,17 @@ func registerAddressAndNumber(frame modbusserver.Framer) (register int, numRegs 
 }
 
 func (s *Server) SetRegisterFunctionHandler(function uint8) error {
-	var registerhandlerfunction func(*modbusserver.Server, modbusserver.Framer) ([]byte, modbusserver.Exception)
+	var registerHandlerFunction func(*modbusServer.Server, modbusServer.Framer) ([]byte, modbusServer.Exception)
 
 	switch function {
 	case 3:
-		registerhandlerfunction = func(mb *modbusserver.Server, frame modbusserver.Framer) ([]byte, modbusserver.Exception) {
+		registerHandlerFunction = func(mb *modbusServer.Server, frame modbusServer.Framer) ([]byte, modbusServer.Exception) {
 			register, numRegs, endRegister := registerAddressAndNumber(frame)
 			device := frame.GetDevice()
 
 			if endRegister > 65536 {
 				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Registeraddress: %v\n", device, register, numRegs, endRegister)
-				return []byte{}, modbusserver.IllegalDataAddress
+				return []byte{}, modbusServer.IllegalDataAddress
 			}
 
 			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
@@ -137,15 +137,15 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 			s.RLock()
 			defer s.RUnlock()
 
-			r := append([]byte{byte(numRegs * 2)}, modbusserver.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
+			r := append([]byte{byte(numRegs * 2)}, modbusServer.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
 			tracelog.Printf("response %v\n", hex.EncodeToString(r))
-			return r, modbusserver.Success
+			return r, modbusServer.Success
 		}
 	}
 
-	if registerhandlerfunction == nil {
+	if registerHandlerFunction == nil {
 		return fmt.Errorf("functioncode %v is not supported", function)
 	}
-	s.handler.RegisterFunctionHandler(function, registerhandlerfunction)
+	s.handler.RegisterFunctionHandler(function, registerHandlerFunction)
 	return nil
 }

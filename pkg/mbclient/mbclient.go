@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	mbslave "github.com/goburrow/modbus"
+	mbSlave "github.com/goburrow/modbus"
 
 	"SmartmeterEmu/pkg/tools"
 )
@@ -41,8 +41,8 @@ func NewClient() (c *Client) {
 }
 
 // Listen starts the go function to receive data
-func (c *Client) Listen(connectionstring string, polling time.Duration) (err error) {
-	c.connectionString, c.deviceId, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionstring)
+func (c *Client) Listen(connectionString string, polling time.Duration) (err error) {
+	c.connectionString, c.deviceId, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionString)
 	c.ticker = polling
 
 	go c.receiver()
@@ -116,7 +116,7 @@ func (c *Client) get(address, quantity uint16) (data []byte, err error) {
 			close(done)
 		}()
 
-		clientHandler := mbslave.NewTCPClientHandler(c.connectionString)
+		clientHandler := mbSlave.NewTCPClientHandler(c.connectionString)
 		clientHandler.SlaveId = c.deviceId
 
 		if err = clientHandler.Connect(); err != nil {
@@ -124,7 +124,7 @@ func (c *Client) get(address, quantity uint16) (data []byte, err error) {
 		}
 		defer clientHandler.Close()
 
-		client := mbslave.NewClient(clientHandler)
+		client := mbSlave.NewClient(clientHandler)
 		// TODO registers should be a parameter in the config file
 		data, err = client.ReadHoldingRegisters(address, quantity)
 	}()
