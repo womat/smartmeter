@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-func GetPortSerialTimeOut(config string) (portName string, baudRate uint, dataBits uint, parity string, stopBit uint, TimeOut time.Duration) {
-	TimeOut = time.Second
+func GetPortSerialTimeOut(config string) (portName string, baudRate uint, dataBits uint, parity string, stopBit uint, timeOut time.Duration) {
+	timeOut = time.Second
 
 	m := make(map[string]string)
 	fields := strings.Fields(config)
@@ -41,15 +41,15 @@ func GetPortSerialTimeOut(config string) (portName string, baudRate uint, dataBi
 		i, _ := strconv.Atoi(v)
 		switch p {
 		case "Timeout":
-			TimeOut = time.Duration(i) * time.Millisecond
+			timeOut = time.Duration(i) * time.Millisecond
 		}
 	}
 
 	return
 }
 
-func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId byte, TimeOut time.Duration, MaxRetries int) {
-	DeviceId = 1
+func GetConnectionDeviceIdTimeOut(config string) (connection string, deviceId byte, TimeOut time.Duration, MaxRetries int) {
+	deviceId = 1
 	TimeOut = time.Second
 
 	m := make(map[string]string)
@@ -64,7 +64,7 @@ func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId by
 		if regexp.MustCompile(`^https?://.*$`).MatchString(field) {
 			connection = field
 		}
-		// split fields into a map, eg DeviceId:1 >> m[DeviceId]=1
+		// split fields into a map, eg deviceId:1 >> m[deviceId]=1
 		parts := strings.Split(field, ":")
 		if len(parts) == 2 {
 			m[parts[0]] = parts[1]
@@ -76,9 +76,9 @@ func GetConnectionDeviceIdTimeOut(config string) (connection string, DeviceId by
 	for p, v := range m {
 		i, _ := strconv.Atoi(v)
 		switch p {
-		case "DeviceId":
+		case "deviceId":
 			if i > 0 && i < 248 {
-				DeviceId = byte(i)
+				deviceId = byte(i)
 			}
 		case "Timeout":
 			TimeOut = time.Duration(i) * time.Millisecond

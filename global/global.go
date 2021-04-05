@@ -16,6 +16,7 @@ import (
 // VERSION differs from semantic versioning as described in https://semver.org/
 // but we keep the correct syntax.
 const VERSION = "1.0.23+20201008"
+const MODULE = "SmartMeterEmu"
 
 const (
 	Polling = iota
@@ -49,8 +50,8 @@ type ClientConfig struct {
 type ModbusServer struct {
 	Connection string
 	Mode       int
-	Rs485      struct {
-		Interframedelay time.Duration
+	RS485      struct {
+		InterFrameDelay time.Duration
 	}
 	Options serial.OpenOptions
 }
@@ -81,9 +82,9 @@ func init() {
 		Clients: map[string]ClientConfig{},
 		ModbusServer: ModbusServer{
 			Mode: Polling,
-			Rs485: struct {
-				Interframedelay time.Duration
-			}{Interframedelay: 4 * time.Millisecond},
+			RS485: struct {
+				InterFrameDelay time.Duration
+			}{InterFrameDelay: 4 * time.Millisecond},
 		},
 		Register: map[string]RegisterMap{},
 	}

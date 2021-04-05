@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
 
-	"SmartmeterEmu/pkg/tools"
+	"SmartMeterEmu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus gateway
@@ -43,7 +43,7 @@ func NewClient() (c *Client) {
 	return
 }
 
-//Listen starts the go function to receive data
+// Listen starts the go function to receive data
 func (c *Client) Listen(connectionString string, polling time.Duration) (err error) {
 	c.connectionString, _, c.timeout, c.maxRetries = tools.GetConnectionDeviceIdTimeOut(connectionString)
 	c.ticker = polling
@@ -112,7 +112,7 @@ func (c *Client) receiver() {
 
 		d := ClientData{
 			Timestamp: time.Now(),
-			Runtime:   time.Now().Sub(startTime),
+			Runtime:   time.Since(startTime),
 			Register:  register,
 		}
 		tracelog.Printf("send data to client channel: %+v\n", d)
@@ -142,7 +142,7 @@ func (c *Client) get(connectionString string) (register map[uint16]uint16, err e
 			return
 		}
 
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
 		// Convert response body to result struct
