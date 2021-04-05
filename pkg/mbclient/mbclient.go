@@ -6,7 +6,7 @@ import (
 
 	mbSlave "github.com/goburrow/modbus"
 
-	"SmartmeterEmu/pkg/tools"
+	"SmartMeterEmu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus client
@@ -53,7 +53,7 @@ func (c *Client) Listen(connectionString string, polling time.Duration) (err err
 // receiver is the Modbus Client data receiver
 func (c *Client) receiver() {
 	var retryCounter int
-	//retry := make(chan bool)
+	// retry := make(chan bool)
 	ticker := time.NewTicker(c.ticker)
 	defer ticker.Stop()
 	retry := time.NewTicker(time.Millisecond)
@@ -94,7 +94,7 @@ func (c *Client) receiver() {
 
 		d := ClientData{
 			Timestamp: time.Now(),
-			Runtime:   time.Now().Sub(start),
+			Runtime:   time.Since(start),
 			Data:      data,
 		}
 		tracelog.Printf("send data to client channel: %+v\n", d)

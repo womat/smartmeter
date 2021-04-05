@@ -59,7 +59,7 @@ func (s *Server) ListenTCP(port string) error {
 	return s.handler.ListenTCP(port)
 }
 
-//Close closes the server and closes the connect
+// Close closes the server and closes the connect
 func (s *Server) Close() error {
 	s.handler.Close()
 	return nil
@@ -118,7 +118,7 @@ func (s *Server) SetRegisterFunctionHandler(function uint8) error {
 			device := frame.GetDevice()
 
 			if endRegister > 65536 {
-				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Registeraddress: %v\n", device, register, numRegs, endRegister)
+				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Register address: %v\n", device, register, numRegs, endRegister)
 				return []byte{}, modbusServer.IllegalDataAddress
 			}
 

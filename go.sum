@@ -171,6 +171,8 @@ github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07/go.mod h1:kDXzergiv9cbyO7IOYJZWg1U88JhDg3PB6klq9Hg2pA=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
+github.com/womat/debug v0.0.3 h1:hUo0HSNMABMMA2gC76eIOvqCBskvlGfaj7XGefyp1lc=
+github.com/womat/debug v0.0.3/go.mod h1:ZlJgpzYBq01tKUYOlmXVc4R1Jd2YK+H7J/O8k1tFn2c=
 github.com/womat/framereader v0.0.8 h1:l6+e8PdN6b2iTKqtjv2uZCLfxOobL7fyi7EecZalPnU=
 github.com/womat/framereader v0.0.8/go.mod h1:FVMJKF2OhH0RaGB+qelRXVkUOZVP1MrCRKebk3xyckQ=
 github.com/womat/framereader v0.0.10 h1:Q/e0tL2W3oFEHNcdaVJSgGS68N3IOBGxKH3j2tiGClM=
@@ -191,6 +193,8 @@ github.com/womat/mbserver v0.0.5 h1:cxDvdYwYZ7SZseDlDXPW7z3wwW+9fA9kOUbvAyEiFjo=
 github.com/womat/mbserver v0.0.5/go.mod h1:ZO4bObxoTtqMbUvb3FWe7sM/a5oaY6fF+D/hl1AOL9o=
 github.com/womat/mbserver v0.0.6 h1:xsWdpVHnD7w705uEmLVcF4jmArrOyGGw3I8Y5ZXv7dA=
 github.com/womat/mbserver v0.0.6/go.mod h1:ZO4bObxoTtqMbUvb3FWe7sM/a5oaY6fF+D/hl1AOL9o=
+github.com/womat/tools v0.0.3 h1:x6RN8mQ/u0LJZh0KMURPOPy4nGe51lqXHNIVLRV2oIs=
+github.com/womat/tools v0.0.3/go.mod h1:5JuQHQzagb1WdNUeVT4f0bsd/FglbMN7ffzFI+z1YiY=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xiegeo/coloredgoroutine v0.1.1/go.mod h1:d3jyamWlthEBXOL5qUpKOaaKSJM75HuCIn/z9f4ylrs=
 github.com/xiegeo/modbusone v0.2.3 h1:Z23pBCrdVyUugQDdP7p4zIKbQOWBUQ12fFkxbcE79cM=

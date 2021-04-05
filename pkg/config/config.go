@@ -13,8 +13,8 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"SmartmeterEmu/global"
-	"SmartmeterEmu/pkg/tools"
+	"SmartMeterEmu/global"
+	"SmartMeterEmu/pkg/tools"
 )
 
 const (
@@ -88,7 +88,7 @@ func init() {
 
 	// split the config string into a register structure
 	for name, register := range configFile.Register {
-		//TODO registers should not be global, each client needs register config
+		// TODO registers should not be global, each client needs register config
 		register.ClientReg = getRegisterConfig(register.ClientReg, register.Client)
 		register.ServerReg = getRegisterConfig(register.ServerReg, register.Server)
 		configFile.Register[name] = register
@@ -151,13 +151,12 @@ func init() {
 	global.Config.ModbusServer.Options = configFile.ModbusServer.Options
 
 	if t := configFile.ModbusServer.Rs485.Interframedelay; t > 0 {
-		global.Config.ModbusServer.Rs485.Interframedelay = time.Duration(t) * time.Millisecond
+		global.Config.ModbusServer.RS485.InterFrameDelay = time.Duration(t) * time.Millisecond
 	}
 
 	if configFile.ModbusServer.Mode == "request" {
 		global.Config.ModbusServer.Mode = global.Request
 	}
-	return
 }
 
 func getRegisterConfig(reg global.Register, config string) global.Register {
@@ -218,7 +217,7 @@ func getRegisterConfig(reg global.Register, config string) global.Register {
 				}
 			}
 			if reg.Value == nil {
-				//if no type was defined, UINT16 is used (corresponds to modbus register)
+				// if no type was defined, UINT16 is used (corresponds to modbus register)
 				reg.Value = uint16(x)
 			}
 		}
@@ -314,7 +313,7 @@ func getRegisterConfig(reg global.Register, config string) global.Register {
 		"Powerfactor L3": {
 			ClientReg:      Register{Address: 74, Format: _uint16, SF: -4},
 			MasterReg: Register{Address: 0x1046, Format: _uint16, SF: 3, Mul: 1}},
-		"Frequeny": {
+		"Frequency": {
 			ClientReg:      Register{Address: 76, Format: _uint16, SF: -2},
 			MasterReg: Register{Address: 0x1026, Format: _uint16, SF: 1, Mul: 1}},
 	}

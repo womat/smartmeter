@@ -10,13 +10,13 @@ import (
 	"github.com/womat/framereader"
 	modbusServer "github.com/womat/mbserver"
 
-	"SmartmeterEmu/global"
-	_ "SmartmeterEmu/pkg/config"
-	"SmartmeterEmu/pkg/debug"
-	"SmartmeterEmu/pkg/mbclient"
-	"SmartmeterEmu/pkg/mbgw"
-	"SmartmeterEmu/pkg/mbserver"
-	"SmartmeterEmu/pkg/tools"
+	"SmartMeterEmu/global"
+	_ "SmartMeterEmu/pkg/config"
+	"SmartMeterEmu/pkg/debug"
+	"SmartMeterEmu/pkg/mbclient"
+	"SmartMeterEmu/pkg/mbgw"
+	"SmartMeterEmu/pkg/mbserver"
+	"SmartMeterEmu/pkg/tools"
 )
 
 const (
@@ -91,7 +91,7 @@ func main() {
 		return
 	}
 
-	serialReadWriteCloser := framereader.NewReadWriteCloser(port, ModbusServerTimeOut, global.Config.ModbusServer.Rs485.Interframedelay)
+	serialReadWriteCloser := framereader.NewReadWriteCloser(port, ModbusServerTimeOut, global.Config.ModbusServer.RS485.InterFrameDelay)
 	defer serialReadWriteCloser.Close()
 
 	ModBusServer := mbserver.NewServer()
@@ -192,7 +192,7 @@ func (handler *clientHandler) handler(server *mbserver.Server) {
 
 						endAddress := r.ClientReg.Address + sizeOf(r.ClientReg.Format)
 						if int(endAddress) > len(stream.Data) {
-							debug.Warninglog.Printf("endaddress (%v) exceeds received data range (%v), register %v will be ignored\n", endAddress, len(stream.Data), n)
+							debug.Warninglog.Printf("end address (%v) exceeds received data range (%v), register %v will be ignored\n", endAddress, len(stream.Data), n)
 							continue
 						}
 
