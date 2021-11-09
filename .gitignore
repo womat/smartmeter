@@ -2,3 +2,5 @@
 /test.yaml
 /cmd/config.yaml
 /pkg/config/config.yaml
+go.sum
+.idea
