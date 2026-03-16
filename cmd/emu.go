@@ -6,17 +6,15 @@ import (
 	"time"
 
 	"github.com/jacobsa/go-serial/serial"
+	"github.com/womat/smartmeteremu/global"
+	"github.com/womat/smartmeteremu/pkg/debug"
+	"github.com/womat/smartmeteremu/pkg/mbclient"
+	"github.com/womat/smartmeteremu/pkg/mbgw"
+	"github.com/womat/smartmeteremu/pkg/mbserver"
+	"github.com/womat/smartmeteremu/pkg/tools"
 
 	"github.com/womat/framereader"
 	modbusServer "github.com/womat/mbserver"
-
-	"SmartMeterEmu/global"
-	_ "SmartMeterEmu/pkg/config"
-	"SmartMeterEmu/pkg/debug"
-	"SmartMeterEmu/pkg/mbclient"
-	"SmartMeterEmu/pkg/mbgw"
-	"SmartMeterEmu/pkg/mbserver"
-	"SmartMeterEmu/pkg/tools"
 )
 
 const (

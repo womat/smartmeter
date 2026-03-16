@@ -1,0 +1,82 @@
+definitions:
+  health.Model:
+    properties:
+      app:
+        description: Application name (MODULE)
+        type: string
+      appVersion:
+        description: Current version of the application
+        type: string
+      goVersion:
+        description: Go runtime version
+        type: string
+      heapAllocBytes:
+        description: Allocated heap memory in bytes
+        type: integer
+      hostname:
+        description: Machine name where the app runs
+        type: string
+      numGoroutines:
+        description: Current number of active goroutines
+        type: integer
+      os:
+        description: Operating system name
+        type: string
+      sysMemoryBytes:
+        description: Total memory obtained from the OS
+        type: integer
+      timestamp:
+        description: UTC timestamp when health info was collected (RFC3339)
+        type: string
+      uptimeSeconds:
+        description: Application uptime in seconds
+        type: number
+    type: object
+info:
+  contact: {}
+paths:
+  /health:
+    get:
+      description: Retrieves memory usage, goroutine count, version, hostname, Go
+        runtime version, and OS.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Health data successfully retrieved
+          schema:
+            $ref: '#/definitions/health.Model'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Get health data
+      tags:
+      - info
+  /version:
+    get:
+      description: Returns the current application name and version. No authentication
+        required.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Application version and name
+          schema:
+            properties:
+              app:
+                type: string
+              appVersion:
+                type: string
+            type: object
+      summary: Get application version and name
+      tags:
+      - info
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

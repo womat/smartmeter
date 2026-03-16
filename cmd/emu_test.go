@@ -3,12 +3,12 @@ package main
 import (
 	mbSlave "github.com/goburrow/modbus"
 	modbusServer "github.com/womat/mbserver"
+	"github.com/womat/smartmeteremu/global"
+	"github.com/womat/smartmeteremu/pkg/debug"
+	"github.com/womat/smartmeteremu/pkg/mbclient"
+	"github.com/womat/smartmeteremu/pkg/mbgw"
+	"github.com/womat/smartmeteremu/pkg/mbserver"
 
-	"SmartmeterEmu/global"
-	"SmartmeterEmu/pkg/debug"
-	"SmartmeterEmu/pkg/mbclient"
-	"SmartmeterEmu/pkg/mbgw"
-	"SmartmeterEmu/pkg/mbserver"
 	"github.com/womat/framereader"
 
 	"encoding/json"

@@ -1,159 +1,378 @@
-debug:
-  # log file e.g. /tmp/emu.log; stderr; stdout
-  # default: stderr
-  file: stderr
-  # flag: (default: standard)
-  #       trace    >> Warning | Info | Error | Fatal | Debug | Trace
-  #       debug    >> Warning | Info | Error | Fatal | Debug
-  #       standard >> Warning | Info | Error | Fatal
-  # flag: debug
-  package:
-    main: standard
-    mbclient: standard
-    mbserver: standard
-    mbgw: standard
-    config: standard
-    debug: standard
-    modbusserver: standard
-    framereader: standard
-clients:
-  # key >> name of device
-  #   type: mbclient | mbgateway | fritz!powerline
-  #   connection: connectionstring eg: TCP 192.0.2.10:502  DeviceId:1 Timeout:500 (timeout in ms (default 1000ms)
-  #   pollingrate: in seconds (default 60) if parameter mode is set to request, the pollingrate can be quite high (eg 300s)
-  #   mode: (default polling)
-  #         request >> data are updated with each request
-  #         polling >> data are updated at the polling rate (parameter pollingrate)
-  #   deviceid: [1-247] (default 1)
-  primarymeter:
-    type: mbclient
-    connection: TCP 192.0.2.10:502 DeviceId:1 Timeout:100 MaxRetries:1
-    pollingrate: 10
-    mode: request
-    deviceid: 1
-    register:
-      unknown:
-        server: 'Addr:18 Value:285 uint16'
-      Device Identifier:
-        server: 'Addr:768 Value:117 uint16'
-      SerialNumber:
-        server: 'Addr:4176 Value:99999999 uint32'
-  heatpump:
-    type: mbgateway
-    connection: HTTP http://raspberryz:8080 Timeout:500 MaxRetries:1
-    pollingrate: 10
-    mode: request
-    deviceid: 2
-    register:
-      unknown:
-        client: 'Addr:18 uint16 quantity:1'
-        server: 'Addr:18 uint16'
-      Device Identifier:
-        client: 'Addr:768 uint16 quantity:1'
-        server: 'Addr:768 uint16'
-      SerialNumber:
-        client: 'Addr:4176 uint16 quantity:2'
-        server: 'Addr:4176 uint16'
-      Smartmeter Data:
-        client: 'Addr:4096 uint16 quantity:64'
-        server: 'Addr:4096 uint16'
-  dryer:
-    type: fritz!powerline
-    connection: HTTP http://fritz.box Timeout:500
-    pollingrate: 15
-    mode: request
-    deviceid: 3
-    register:
-      unknown:
-        server: 'Addr:18 Value:285 uint16'
-      Device Identifier:
-        server: 'Addr:768 Value:117 uint16'
-      SerialNumber:
-        server: 'Addr:4176 Value:88888888 uint32'
+# =============================================================================
+# app configuration
+# =============================================================================
 
-modbusserver:
-  #  connection: connectionstring eg: RTU /dev/ttyS0,9600,8,N,1 Timeout:200 (timeout in ms (default 1000ms)
-  #     Timeout: in ms (default 1000ms), Timeout for client response (if client mode = request)
-  connection: RTU com3,9600,8,N,1 Timeout:5000
-  options:
-    rtsctsflowcontrol: false
-    intercharactertimeout: 4000
-    minimumreadsize: 1
-    rs485enable: false
-    rs485rtshighduringsend: false
-    rs485rtshighaftersend: false
-    rs485rxduringtx: false
-    rs485delayrtsbeforesend: 0
-    rs485delayrtsaftersend: 0
-register:
-  unknown:
-    server: 'Addr:18 Value:285 uint16'
-  Device Identifier:
-    server: 'Addr:768 Value:117 uint16'
-  SerialNumber:
-    server: 'Addr:4176 Value:99999999 uint32'
-  Current L1:
-    client: 'Addr:58 uint32 SF:-3'
-    server: 'Addr:4102 uint32 SF:3'
-  Current L2:
-    client: 'Addr:62 uint32 SF:-3'
-    server: 'Addr:4104 uint32 SF:3'
-  Current L3:
-    client: 'Addr:66 uint32 SF:-3'
-    server: 'Addr:4106 uint32 SF:3'
-  Day Energy Smartfox:
-    client: 'Addr:32 uint32 SF:0'
-  Day Energy from grid:
-    client: 'Addr:24 uint32 SF:0'
-  Day Energy into grid:
-    client: 'Addr:28 uint32 SF:0'
-  Energy Smartfox:
-    client: 'Addr:16 uint64 SF:0'
-  Energy into grid:
-    client: 'Addr:8 uint64 SF:0'
-    server: 'Addr:4128 uint32 SF:0'
-  Energy from grid:
-    client: 'Addr:0 uint64 SF:0'
-    server: 'Addr:4124 uint32 SF:0'
-  Frequeny:
-    client: 'Addr:76 uint16 SF:-2'
-    server: 'Addr:4134 uint16 SF:1'
-  Power L1:
-    client: 'Addr:40 uint32 SF:0'
-    server: 'Addr:4140 uint32 SF:2'
-  Power L2:
-    client: 'Addr:44 uint32 SF:0'
-    server: 'Addr:4142 uint32 SF:2'
-  Power L3:
-    client: 'Addr:48 uint32 SF:0'
-    server: 'Addr:4144 uint32 SF:2'
-  Power total:
-    client: 'Addr:36 uint32 SF:0'
-    server: 'Addr:4116 uint32 SF:2'
-  Powerfactor L1:
-    client: 'Addr:70 sint16 SF:-4'
-    server: 'Addr:4164 sint16 SF:2'
-  Powerfactor L2:
-    client: 'Addr:72 sint16 SF:-4'
-    server: 'Addr:4165 sint16 SF:2'
-  Powerfactor L3:
-    client: 'Addr:74 sint16 SF:-4'
-    server: 'Addr:4166 sint16 SF:2'
-  Voltage L1-L2:
-    client: 'Addr:52 uint16 SF:-1'
-    server: 'Addr:4110 uint32 SF:3 Mul:1.732050807568877'
-  Voltage L1-N:
-    client: 'Addr:52 uint16 SF:-1'
-    server: 'Addr:4096 uint32 SF:3'
-  Voltage L2-L3:
-    client: 'Addr:54 uint16 SF:-1'
-    server: 'Addr:4112 uint32 SF:3 Mul:1.732050807568877'
-  Voltage L2-N:
-    client: 'Addr:54 uint16 SF:-1'
-    server: 'Addr:4098 uint32 SF:3 '
-  Voltage L3-L1:
-    client: 'Addr:56 uint16 SF:-1'
-    server: 'Addr:4114 uint32 SF:3 Mul:1.732050807568877'
-  Voltage L3-N:
-    client: 'Addr:56 uint16 SF:-1'
-    server: 'Addr:4100 uint32 SF:3'
+# logLevel defines the minimum log level.
+# Messages with at least this level are logged.
+# Allowed values: debug | info | warn | error
+logLevel: info
+
+# logDestination defines where logs are written to.
+# Supported values: stdout | stderr | /path/to/logfile
+logDestination: stdout
+
+# environment: dev | prod
+env: dev
+
+
+# =============================================================================
+# Webserver configuration (HTTPS)
+# =============================================================================
+webserver:
+  # Host address the HTTPS server listens on (0.0.0.0 = all interfaces)
+  listenHost: 0.0.0.0
+
+  # Port the HTTPS server listens on
+  listenPort: 8443
+
+  # Global API key for protected endpoints
+  apiKey: changeme!
+
+  # TLS private key file
+  keyFile: /opt/smartmeteremu/etc/key.pem
+
+  # TLS certificate file
+  certFile: /opt/smartmeteremu/etc/cert.pem
+
+  # Blocked IP addresses or networks (empty = none blocked)
+  # Examples: 192.168.0.1, 192.168.0.0/16, 10.0.0.0/8
+  blockedIPs: []
+  #  - 192.168.0.1
+  #  - 192.168.0.0/16
+
+  # Allowed IP addresses or networks (empty = all allowed)
+  # Note: ::1 is the IPv6 loopback address
+  # Examples: 127.0.0.1, ::1, 192.168.0.0/16
+  allowedIPs: []
+  #  - 127.0.0.1
+  #  - ::1
+  #  - 192.168.0.0/16
+
+# =============================================================================
+# Fronius Smart Meter Emulator — Konfiguration
+# =============================================================================
+#
+# Diese Datei beschreibt ausschließlich:
+#   1. Wie der Emulator nach außen antwortet (listen)
+#   2. Woher die Messwerte kommen (source pro device)
+#   3. Wie Quellregister auf kanonische Felder gemappt werden (map)
+#
+# Was NICHT hier konfiguriert wird:
+#   - Fronius-Zielregister        → hardcoded im Code
+#   - Identifikationsregister     → hardcoded im Code
+#
+# =============================================================================
+# Kanonische Felder
+# =============================================================================
+#
+#   PFLICHT — müssen pro Device gemappt sein:
+#     power_total       Wirkleistung gesamt         [W]    signed float
+#     power_l1          Wirkleistung Phase 1         [W]    signed float
+#     power_l2          Wirkleistung Phase 2         [W]    signed float
+#     power_l3          Wirkleistung Phase 3         [W]    signed float
+#     voltage_l1        Spannung Phase 1–N           [V]
+#     voltage_l2        Spannung Phase 2–N           [V]
+#     voltage_l3        Spannung Phase 3–N           [V]
+#     current_l1        Strom Phase 1                [A]    signed float
+#     current_l2        Strom Phase 2                [A]    signed float
+#     current_l3        Strom Phase 3                [A]    signed float
+#     energy_import     Bezugsenergie gesamt         [Wh]
+#     energy_export     Einspeiseenergie gesamt      [Wh]
+#     frequency         Netzfrequenz                 [Hz]
+#
+#   OPTIONAL — Defaultwert 1.0 wenn nicht angegeben:
+#     pf_l1             Leistungsfaktor Phase 1      [-1.0 .. 1.0]
+#     pf_l2             Leistungsfaktor Phase 2      [-1.0 .. 1.0]
+#     pf_l3             Leistungsfaktor Phase 3      [-1.0 .. 1.0]
+#
+# =============================================================================
+# Mapping-Typen (type:)
+# =============================================================================
+#
+#   register  Wert wird aus Quellregister gelesen
+#   fixed     Fixer Wert, kein Quellzähler nötig
+#   expr      Berechnung aus anderen kanonischen Feldern
+#             Syntax: "${field1} + ${field2} * 0.5"
+#             Operatoren: + - * /  und Klammerung
+#             Hinweis: referenzierte Felder müssen im selben Device definiert sein
+#
+# Für type: register
+#   address     Startadresse im Quellzähler (0-basiert)
+#   dtype       uint16 | uint32 | uint64 | int16 | int32 | int64 | float32
+#   byte_order  big | little                              (default: big)
+#   word_order  big | little  (nur bei 32/64 bit)         (default: big)
+#   scale       Exponent: Realwert = (Rohwert + offset) * 10^scale  (default: 0)
+#   offset      Additiver Offset auf Rohwert vor Skalierung          (default: 0)
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# listen — Modbus-Server nach außen
+# RTU und TCP können gleichzeitig aktiv sein.
+# -----------------------------------------------------------------------------
+listen:
+  tcp:
+    enabled: true
+    host: "0.0.0.0"
+    port: 502
+  rtu:
+    enabled: false
+    port: "/dev/ttyUSB0"
+    baud_rate: 9600
+    data_bits: 8
+    parity: "N"             # N=none  E=even  O=odd
+    stop_bits: 1
+
+# -----------------------------------------------------------------------------
+# devices — Liste der emulierten Smart Meter
+# Jeder Eintrag ist ein eigenständiger Modbus-Slave.
+# -----------------------------------------------------------------------------
+devices:
+  # ---------------------------------------------------------------------------
+  # Device 1: Hauptzähler — Quellzähler via Modbus RTU
+  # ---------------------------------------------------------------------------
+  - name: "main_meter"
+    unitId: 200
+
+    # -------------------------------------------------------------------------
+    # source — Upstream-Verbindung zum echten Zähler
+    # -------------------------------------------------------------------------
+    source:
+      type: rtu             # rtu | tcp
+      unitId: 1
+      timeout: "2s"
+      rtu:
+        port: "/dev/ttyUSB1"
+        baud_rate: 9600
+        data_bits: 8
+        parity: "N"
+        stop_bits: 1
+      # tcp:
+      #   host: "192.168.1.100"
+      #   port: 502
+
+    # -------------------------------------------------------------------------
+    # poll — Leseintervall und Blockbildung
+    # -------------------------------------------------------------------------
+    poll:
+      interval: "1s"
+      max_block_gap: 4      # Max. Lücke (Register) innerhalb eines Leseblocks
+      max_block_size: 125   # Max. Registerzahl pro Leseblock (Modbus-Limit 125)
+
+    # -------------------------------------------------------------------------
+    # map — kanonisches Feld als Schlüssel, Mapping-Definition als Wert
+    # -------------------------------------------------------------------------
+    map:
+      device_id:
+        type: fixed
+        value: 285
+      firmware:
+        type: fixed
+        value: 1.17
+      serial_number:
+        type: fixed
+        value: 99999999
+      serial_string:
+
+      voltage_l1_n:
+        type: register
+        address: 52
+        dtype: uint16
+        byte_order: big
+        scale: -1             # Rohwert 2300 → 230.0 V
+      voltage_l2_n:
+        type: register
+        address: 54
+        dtype: uint16
+        byte_order: big
+        scale: -1
+      voltage_l3_n:
+        type: register
+        address: 56
+        dtype: uint16
+        byte_order: big
+        scale: -1
+      voltage_l1_l2:
+        type: expr
+        expr: "${voltage_l1_n} * 1.732050807568877"
+      voltage_l1_l3:
+        type: expr
+        expr: "${voltage_l1_n} * SQRT(3)"
+      voltage_l2_l3:
+        type: expr
+        expr: "${voltage_l2_n} * SQRT(3)"
+
+      current_l1:
+        type: register
+        address: 58
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: -3             # Rohwert 15230 → 15.230 A
+      current_l2:
+        type: register
+        address: 62
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: -3
+      current_l3:
+        type: register
+        address: 66
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: -3
+
+      powerfactor_l1:
+        type: register
+        address: 70
+        dtype: int16
+        byte_order: big
+        scale: -4             # Rohwert 9800 → 0.9800
+      powerfactor_l2:
+        type: register
+        address: 72
+        dtype: int16
+        byte_order: big
+        scale: -4
+      powerfactor_l3:
+        type: register
+        address: 74
+        dtype: int16
+        byte_order: big
+        scale: -4
+
+      frequency:
+        type: register
+        address: 76
+        dtype: uint16
+        byte_order: big
+        scale: -2             # Rohwert 5000 → 50.00 Hz
+
+      power_total:
+        type: register
+        address: 36
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: 0
+      power_l1:
+        type: register
+        address: 40
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: 0
+      power_l2:
+        type: register
+        address: 44
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: 0
+      power_l3:
+        type: register
+        address: 48
+        dtype: uint32
+        byte_order: big
+        word_order: big
+        scale: 0
+
+      energy_import:
+        type: register
+        address: 0
+        dtype: uint64
+        byte_order: big
+        word_order: big
+        scale: 0
+      energy_export:
+        type: register
+        address: 8
+        dtype: uint64
+        byte_order: big
+        word_order: big
+        scale: 0
+
+  # ---------------------------------------------------------------------------
+  # Device 2: Beispiel — TCP-Quelle, fixe Frequenz, berechnete Gesamtleistung
+  # (auskommentiert — als Vorlage)
+  # ---------------------------------------------------------------------------
+  # - name: "sub_meter"
+  #   unitId: 201
+  #
+  #   source:
+  #     type: tcp
+  #     unitId: 1
+  #     timeout: "2s"
+  #     tcp:
+  #       host: "192.168.1.101"
+  #       port: 502
+  #
+  #   poll:
+  #     interval: "1s"
+  #     max_block_gap: 4
+  #     max_block_size: 125
+  #
+  #   map:
+  #     voltage_l1:
+  #       type: register
+  #       address: 52
+  #       dtype: uint16
+  #       scale: -1
+  #     voltage_l2:
+  #       type: register
+  #       address: 54
+  #       dtype: uint16
+  #       scale: -1
+  #     voltage_l3:
+  #       type: register
+  #       address: 56
+  #       dtype: uint16
+  #       scale: -1
+  #     current_l1:
+  #       type: register
+  #       address: 58
+  #       dtype: uint32
+  #       scale: -3
+  #     current_l2:
+  #       type: register
+  #       address: 62
+  #       dtype: uint32
+  #       scale: -3
+  #     current_l3:
+  #       type: register
+  #       address: 66
+  #       dtype: uint32
+  #       scale: -3
+  #     power_l1:
+  #       type: register
+  #       address: 40
+  #       dtype: uint32
+  #       scale: 0
+  #     power_l2:
+  #       type: register
+  #       address: 44
+  #       dtype: uint32
+  #       scale: 0
+  #     power_l3:
+  #       type: register
+  #       address: 48
+  #       dtype: uint32
+  #       scale: 0
+  #     power_total:
+  #       type: expr
+  #       expr: "${power_l1} + ${power_l2} + ${power_l3}"
+  #     energy_import:
+  #       type: register
+  #       address: 0
+  #       dtype: uint64
+  #       scale: 0
+  #     energy_export:
+  #       type: register
+  #       address: 8
+  #       dtype: uint64
+  #       scale: 0
+  #     frequency:
+  #       type: fixed
+  #       value: 50.0

@@ -1,0 +1,121 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/health": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, and OS.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "info"
+                ],
+                "summary": "Get health data",
+                "responses": {
+                    "200": {
+                        "description": "Health data successfully retrieved",
+                        "schema": {
+                            "$ref": "#/definitions/health.Model"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/version": {
+            "get": {
+                "description": "Returns the current application name and version. No authentication required.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "info"
+                ],
+                "summary": "Get application version and name",
+                "responses": {
+                    "200": {
+                        "description": "Application version and name",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "app": {
+                                    "type": "string"
+                                },
+                                "appVersion": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "health.Model": {
+            "type": "object",
+            "properties": {
+                "app": {
+                    "description": "Application name (MODULE)",
+                    "type": "string"
+                },
+                "appVersion": {
+                    "description": "Current version of the application",
+                    "type": "string"
+                },
+                "goVersion": {
+                    "description": "Go runtime version",
+                    "type": "string"
+                },
+                "heapAllocBytes": {
+                    "description": "Allocated heap memory in bytes",
+                    "type": "integer"
+                },
+                "hostname": {
+                    "description": "Machine name where the app runs",
+                    "type": "string"
+                },
+                "numGoroutines": {
+                    "description": "Current number of active goroutines",
+                    "type": "integer"
+                },
+                "os": {
+                    "description": "Operating system name",
+                    "type": "string"
+                },
+                "sysMemoryBytes": {
+                    "description": "Total memory obtained from the OS",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "UTC timestamp when health info was collected (RFC3339)",
+                    "type": "string"
+                },
+                "uptimeSeconds": {
+                    "description": "Application uptime in seconds",
+                    "type": "number"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "X-API-Key",
+            "in": "header"
+        }
+    }
+}

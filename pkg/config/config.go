@@ -12,9 +12,8 @@ import (
 	"github.com/jacobsa/go-serial/serial"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-
-	"SmartMeterEmu/global"
-	"SmartMeterEmu/pkg/tools"
+	"github.com/womat/smartmeteremu/global"
+	"github.com/womat/smartmeteremu/pkg/tools"
 )
 
 const (

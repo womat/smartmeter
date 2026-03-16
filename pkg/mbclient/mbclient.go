@@ -5,8 +5,7 @@ import (
 	"time"
 
 	mbSlave "github.com/goburrow/modbus"
-
-	"SmartMeterEmu/pkg/tools"
+	"github.com/womat/smartmeteremu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus client

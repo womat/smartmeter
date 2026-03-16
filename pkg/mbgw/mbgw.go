@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"SmartMeterEmu/pkg/tools"
+	"github.com/womat/smartmeteremu/pkg/tools"
 )
 
 // ClientData stores receive data form modbus gateway
