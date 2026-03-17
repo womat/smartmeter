@@ -13,6 +13,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -44,14 +45,16 @@ const (
 // App is the main application struct.
 // App is where the application is wired up.
 type App struct {
-	wg         sync.WaitGroup // wait group to track running webserver
-	baseDir    string         // working directory
-	config     *Config        // app configuration
-	web        *http.Server   // HTTP server
-	restart    chan struct{}  // signals application restart
-	shutdown   chan struct{}  // signals application shutdown
-	ctx        context.Context
-	cancelFunc context.CancelFunc
+	wg           sync.WaitGroup // wait group to track running webserver
+	baseDir      string         // working directory
+	config       *Config        // app configuration
+	web          *http.Server   // HTTP server
+	restart      chan struct{}  // signals application restart
+	shutdown     chan struct{}  // signals application shutdown
+	ctx          context.Context
+	cancelFunc   context.CancelFunc
+	modbusClient *ModbusService
+	modbusServer *ModbusServerService
 
 	// add your additional handler here
 }
@@ -84,6 +87,17 @@ func (app *App) Run() (*App, error) {
 	}
 
 	// here start your services
+	if len(app.config.Devices) > 0 {
+		//	if err := app.modbusServer.Start(app.config.Listen); err != nil {
+		//		slog.Error("Error starting modbus server", "error", err.Error())
+		//		return app, err
+		//	}
+		if err := app.modbusClient.Start(app.ctx, app.modbusServer); err != nil {
+			slog.Error("Error starting modbus polling service", "error", err.Error())
+			return app, err
+		}
+		slog.Info("Modbus client and server started", "devices", len(app.config.Devices))
+	}
 
 	// handle the OS signals
 	app.HandleOSSignals()
@@ -108,7 +122,19 @@ func (app *App) Run() (*App, error) {
 // - initializes API routes
 func (app *App) Init() (err error) {
 
-	// here initialize your services
+	if len(app.config.Devices) > 0 {
+		app.modbusServer, err = NewModbusServerService(app.config)
+		if err != nil {
+			slog.Error("Failed to initialize Modbus server", "error", err)
+			return err
+		}
+
+		app.modbusClient, err = NewModbusService(app.config)
+		if err != nil {
+			slog.Error("Failed to initialize Modbus client", "error", err)
+			return err
+		}
+	}
 
 	// initRoutes should always be called at the end
 	slog.Debug("Initializing API routes")
@@ -196,7 +222,12 @@ func (app *App) shutdownProcedure(mode int) {
 func (app *App) Cleanup() error {
 	var errs error
 
-	// here cleanup your service
+	if app.modbusClient != nil {
+		errs = errors.Join(errs, app.modbusClient.Close())
+	}
+	if app.modbusServer != nil {
+		errs = errors.Join(errs, app.modbusServer.Close())
+	}
 
 	return errs
 }

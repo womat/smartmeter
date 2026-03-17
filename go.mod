@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/goburrow/modbus v0.1.0
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+	github.com/simonvetter/modbus v1.6.4
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/http-swagger v1.3.4

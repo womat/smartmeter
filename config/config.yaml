@@ -138,24 +138,24 @@ devices:
     # source — Upstream-Verbindung zum echten Zähler
     # -------------------------------------------------------------------------
     source:
-      type: rtu             # rtu | tcp
+      type: tcp             # rtu | tcp
       unitId: 1
-      timeout: "2s"
+      timeout: "750ms"
       rtu:
         port: "/dev/ttyUSB1"
         baud_rate: 9600
         data_bits: 8
         parity: "N"
         stop_bits: 1
-      # tcp:
-      #   host: "192.168.1.100"
-      #   port: 502
+      tcp:
+        host: "smartfox.local"
+        port: 502
 
     # -------------------------------------------------------------------------
     # poll — Leseintervall und Blockbildung
     # -------------------------------------------------------------------------
     poll:
-      interval: "1s"
+      interval: "5m"
       max_block_gap: 4      # Max. Lücke (Register) innerhalb eines Leseblocks
       max_block_size: 125   # Max. Registerzahl pro Leseblock (Modbus-Limit 125)
 
@@ -168,127 +168,129 @@ devices:
         value: 285
       firmware:
         type: fixed
-        value: 1.17
+        value: 117
       serial_number:
         type: fixed
         value: 99999999
       serial_string:
+        type: fixed
+        value: "99999999"
 
-      voltage_l1_n:
+      voltage_l1:
         type: register
-        address: 52
+        address: 41025
         dtype: uint16
         byte_order: big
         scale: -1             # Rohwert 2300 → 230.0 V
-      voltage_l2_n:
+      voltage_l2:
         type: register
-        address: 54
+        address: 41026
         dtype: uint16
         byte_order: big
         scale: -1
-      voltage_l3_n:
+      voltage_l3:
         type: register
-        address: 56
+        address: 41027
         dtype: uint16
         byte_order: big
         scale: -1
       voltage_l1_l2:
         type: expr
-        expr: "${voltage_l1_n} * 1.732050807568877"
-      voltage_l1_l3:
-        type: expr
-        expr: "${voltage_l1_n} * SQRT(3)"
+        expr: "{voltage_l1_n} * 1.732050807568877"
       voltage_l2_l3:
         type: expr
-        expr: "${voltage_l2_n} * SQRT(3)"
+        expr: "{voltage_l2_n} * 1.732050807568877"
+      voltage_l3_l1:
+        type: expr
+        expr: "{voltage_l3_n} * 1.732050807568877"
 
       current_l1:
         type: register
-        address: 58
+        address: 41028
         dtype: uint32
         byte_order: big
         word_order: big
         scale: -3             # Rohwert 15230 → 15.230 A
       current_l2:
         type: register
-        address: 62
+        address: 41030
         dtype: uint32
         byte_order: big
         word_order: big
         scale: -3
       current_l3:
         type: register
-        address: 66
+        address: 41032
         dtype: uint32
         byte_order: big
         word_order: big
         scale: -3
 
-      powerfactor_l1:
+      pf_l1:
         type: register
-        address: 70
+        address: 41034
         dtype: int16
         byte_order: big
         scale: -4             # Rohwert 9800 → 0.9800
-      powerfactor_l2:
+      pf_l2:
         type: register
-        address: 72
+        address: 41035
         dtype: int16
         byte_order: big
         scale: -4
-      powerfactor_l3:
+      pf_l3:
         type: register
-        address: 74
+        address: 41036
         dtype: int16
         byte_order: big
         scale: -4
 
       frequency:
         type: register
-        address: 76
+        address: 41037
         dtype: uint16
         byte_order: big
         scale: -2             # Rohwert 5000 → 50.00 Hz
 
       power_total:
         type: register
-        address: 36
-        dtype: uint32
+        address: 41017
+        dtype: int32
         byte_order: big
         word_order: big
         scale: 0
       power_l1:
         type: register
-        address: 40
-        dtype: uint32
+        address: 41019
+        dtype: int32
         byte_order: big
         word_order: big
         scale: 0
       power_l2:
         type: register
-        address: 44
-        dtype: uint32
+        address: 41021
+        dtype: int32
         byte_order: big
         word_order: big
         scale: 0
       power_l3:
         type: register
-        address: 48
-        dtype: uint32
+        address: 41023
+        dtype: int32
         byte_order: big
         word_order: big
         scale: 0
 
       energy_import:
         type: register
-        address: 0
+        address: 40999
         dtype: uint64
         byte_order: big
         word_order: big
         scale: 0
       energy_export:
         type: register
-        address: 8
+        address: 41003
         dtype: uint64
         byte_order: big
         word_order: big
