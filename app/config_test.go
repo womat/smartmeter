@@ -111,6 +111,7 @@ func TestLoadConfigRejectsDurationWithoutUnit(t *testing.T) {
 	for name, content := range map[string]string{
 		"poll interval":  "meter:\n  m:\n    poll:\n      interval: 1\n",
 		"source timeout": "meter:\n  m:\n    source:\n      timeout: 300\n",
+		"frame delay":    "listen:\n  rtu:\n    interFrameDelay: 20\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := LoadConfig(writeConfig(t, content))

@@ -27,6 +27,10 @@ type ListenTCPConfig struct {
 type ListenRTUConfig struct {
 	Enabled      bool `yaml:"enabled"` // Start the Modbus RTU server
 	SerialConfig `yaml:",inline"`
+
+	// InterFrameDelay is the silence that ends a request; 0 = t3.5 of the Modbus specification
+	// (about 4 ms at 9600 baud). Raise it (e.g. 20-40ms) for USB adapters that split requests.
+	InterFrameDelay time.Duration `yaml:"interFrameDelay"`
 }
 
 // SerialConfig holds the settings of a serial port.

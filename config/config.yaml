@@ -76,6 +76,10 @@ listen:
     dataBits: 8
     parity: N              # N | E | O
     stopBits: 1
+    # Silence that ends a request (default: t3.5 of the Modbus specification, ~4ms at
+    # 9600 baud). Raise it, e.g. to 20ms-40ms, for USB adapters that split requests
+    # (CRC errors in the log).
+    # interFrameDelay: 20ms
 
 # =============================================================================
 # Emulated meters, keyed by name

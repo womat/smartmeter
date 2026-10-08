@@ -3,13 +3,15 @@ package meters
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"math"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/womat/mbserver"
 	"github.com/womat/smartmeter/pkg/fronius"
-	"github.com/womat/smartmeter/pkg/mbserver"
 )
 
 type fakeRegisterReader struct {
@@ -104,7 +106,7 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 		},
 	}
 
-	server := &ModbusServerService{server: mbserver.NewServer()}
+	server := newTestServer()
 	defer server.Close()
 	if err := server.server.NewDevice(200); err != nil {
 		t.Fatalf("NewDevice() error = %v", err)
@@ -128,7 +130,7 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := server.server.GetHoldingRegister(200, tc.addr)
+		got, err := server.holdingRegister(200, tc.addr)
 		if err != nil {
 			t.Fatalf("GetHoldingRegister(%d) error = %v", tc.addr, err)
 		}
@@ -137,7 +139,7 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 		}
 	}
 
-	lineLine, err := server.server.GetHoldingRegister(200, 40081)
+	lineLine, err := server.holdingRegister(200, 40081)
 	if err != nil {
 		t.Fatalf("GetHoldingRegister(40081) error = %v", err)
 	}
@@ -199,7 +201,7 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 		},
 	}
 
-	server := &ModbusServerService{server: mbserver.NewServer()}
+	server := newTestServer()
 	defer server.Close()
 	if err := server.server.NewDevice(200); err != nil {
 		t.Fatalf("NewDevice() error = %v", err)
@@ -222,7 +224,7 @@ func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitID uin
 
 	get := func(addr uint16) uint16 {
 		t.Helper()
-		v, err := server.server.GetHoldingRegister(unitID, addr)
+		v, err := server.holdingRegister(unitID, addr)
 		if err != nil {
 			t.Fatalf("GetHoldingRegister(%d) error = %v", addr, err)
 		}
@@ -333,13 +335,13 @@ func TestPollAndUpdateDiscardsSpike(t *testing.T) {
 	reader := &fakeRegisterReader{registers: map[uint16]uint16{0: 0, 1: 1500}}
 	device.Reader = reader
 
-	server := &ModbusServerService{server: mbserver.NewServer()}
+	server := newTestServer()
 	defer server.Close()
 
 	power := func() int32 {
 		t.Helper()
-		hi, _ := server.server.GetHoldingRegister(1, 4116)
-		lo, _ := server.server.GetHoldingRegister(1, 4117)
+		hi, _ := server.holdingRegister(1, 4116)
+		lo, _ := server.holdingRegister(1, 4117)
 		return int32(uint32(hi)<<16 | uint32(lo))
 	}
 
@@ -411,4 +413,17 @@ func TestStatusAndReady(t *testing.T) {
 	if err := service.Ready(now.Add(2 * time.Second)); err == nil {
 		t.Error("Ready() = nil with a 4 s old snapshot at 1 s interval, want an error")
 	}
+}
+
+func newTestServer() *ModbusServerService {
+	return &ModbusServerService{server: mbserver.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))}
+}
+
+// holdingRegister reads one holding register of unitID, for assertions.
+func (s *ModbusServerService) holdingRegister(unitID uint8, addr uint16) (uint16, error) {
+	regs, err := s.server.HoldingRegisters(unitID, addr, 1)
+	if err != nil {
+		return 0, err
+	}
+	return regs[0], nil
 }

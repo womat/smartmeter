@@ -29,6 +29,10 @@ type Model struct {
 	// Meters holds the diagnostic state per meter name: unit IDs, the last valid snapshot,
 	// the last error and the snapshots discarded as implausible. Filled in by the caller.
 	Meters map[string]meters.MeterStatus `json:"meters"`
+
+	// RTU is the state of the serial port towards the inverter, empty without RTU listener.
+	// Filled in by the caller.
+	RTU []meters.SerialStatus `json:"rtu,omitempty"`
 }
 
 var startTime = time.Now() // Tracks application start time

@@ -35,6 +35,8 @@ the same time, so all clients see the same values from the same moment.
   measure) are discarded, the last valid values stay in place
 - **Block reads**: neighbouring registers are fetched with one request
 - **Consistent reads**: a client never sees a 32-bit value half updated
+- **Robust RS485**: a failed serial port (e.g. an unplugged USB adapter) is reopened
+  automatically, and `/ready` reports it meanwhile
 - **HTTPS REST API** with API key, IP allowlist / blocklist, readiness probe
 - **Hot reload** of the configuration via `SIGHUP`; a broken file is refused, the emulation goes on
 - Release builds for every Raspberry Pi architecture, from the **Pi Zero (ARMv6)** to 64-bit systems
@@ -219,6 +221,10 @@ listen:
     dataBits: 8
     parity: N              # N | E | O
     stopBits: 1
+    # Silence that ends a request (default: t3.5 of the Modbus specification, ~4ms at
+    # 9600 baud). Raise it, e.g. to 20ms-40ms, for USB adapters that split requests
+    # (CRC errors in the log).
+    # interFrameDelay: 20ms
 
 # =============================================================================
 # Emulated meters, keyed by name
@@ -447,7 +453,7 @@ The documents count from 1: register 40001 there is address 40000 here.
 | Method | Path       | Auth    | Description                                                     |
 |--------|------------|---------|-----------------------------------------------------------------|
 | GET    | `/version` | —       | Application name and version                                    |
-| GET    | `/ready`   | —       | Readiness probe: 200, or 503 while a meter has delivered no valid values for three poll intervals |
+| GET    | `/ready`   | —       | Readiness probe: 200, or 503 while a meter has delivered no valid values for three poll intervals or the RTU port is not available |
 | GET    | `/health`  | API Key | Runtime metrics and diagnostics per meter                       |
 
 Authentication via the `X-API-Key` header. Errors are returned as `{"error": "..."}` with the HTTP
@@ -459,7 +465,7 @@ curl -k https://localhost:8443/ready
 curl -k -H "X-API-Key: your-api-key" https://localhost:8443/health
 ```
 
-`/health` reports, besides the runtime metrics, per meter:
+`/health` reports, besides the runtime metrics, per meter and the state of the RTU port:
 
 ```json
 "meters": {
@@ -472,7 +478,10 @@ curl -k -H "X-API-Key: your-api-key" https://localhost:8443/health
     "lastErrorTime": "2026-10-08T21:03:11+02:00",
     "discardedSnapshots": 1
   }
-}
+},
+"rtu": [
+  { "port": "/dev/ttyS0", "connected": true, "since": "2026-10-08T22:16:51+02:00" }
+]
 ```
 
 ---
@@ -536,7 +545,14 @@ sudo systemctl reload smartmeter       # requires ExecReload in the unit, see Qu
 **The inverter shows no meter**
 Check `/ready` first. If it is ready, the problem is on the RS485 side: wiring (D+/D− swapped is
 the most common fault), termination, a second device answering on address 1, or the inverter not set
-to a Fronius Smart Meter on Modbus RTU. `--debug` logs every poll of the upstream meter.
+to a Fronius Smart Meter on Modbus RTU. `Error parsing RTU frame` (CRC errors) in the log means
+requests arrive split, typical for USB adapters: set `listen.rtu.interFrameDelay`, e.g. to `20ms`.
+`--debug` logs every poll of the upstream meter.
+
+**`Serial port failed` in the log**
+The serial port went away, e.g. a USB adapter was unplugged. smartmeter reopens it every 5 seconds
+and logs `Serial port reopened` once it is back; meanwhile `/ready` answers 503 and `rtu` in
+`/health` shows the error.
 
 **`/ready` answers 503**
 The upstream meter has not delivered valid values for three poll intervals. `lastError` in
@@ -579,7 +595,8 @@ modules below. Their terms apply to anyone distributing that binary, not to the 
 |------------------------------------------|--------------------|
 | `github.com/simonvetter/modbus`          | MIT                |
 | `github.com/womat/mbserver`              | MIT                |
-| `github.com/jacobsa/go-serial`           | Apache-2.0         |
+| `go.bug.st/serial`                       | BSD-3-Clause       |
+| `github.com/creack/goselect`             | MIT                |
 | `github.com/goburrow/serial`             | MIT                |
 | `github.com/womat/golib`                 | MIT                |
 | `github.com/swaggo/swag`, `http-swagger` | MIT (swagger builds only) |

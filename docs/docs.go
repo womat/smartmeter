@@ -22,7 +22,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, and per meter the unit IDs, the time and age of the last valid snapshot, the last error and the snapshots discarded as implausible.",
+                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the time and age of the last valid snapshot, the last error and the snapshots discarded as implausible, and the state of the RTU port.",
                 "produces": [
                     "application/json"
                 ],
@@ -48,7 +48,7 @@ const docTemplate = `{
         },
         "/ready": {
             "get": {
-                "description": "Returns 200 while every meter serves current values, 503 while a meter has delivered no valid snapshot for three poll intervals. No authentication required.",
+                "description": "Returns 200 while every meter serves current values and the RTU port is available, 503 while a meter has delivered no valid snapshot for three poll intervals or the RTU port is not available. No authentication required.",
                 "produces": [
                     "application/json"
                 ],
@@ -143,6 +143,13 @@ const docTemplate = `{
                     "description": "Operating system name",
                     "type": "string"
                 },
+                "rtu": {
+                    "description": "RTU is the state of the serial port towards the inverter, empty without RTU listener.\nFilled in by the caller.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/meters.SerialStatus"
+                    }
+                },
                 "sysMemoryBytes": {
                     "description": "Total memory obtained from the OS",
                     "type": "integer"
@@ -185,11 +192,28 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "unitIDs": {
-                    "description": "Unit IDs the meter answers on",
+                    "description": "Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)",
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "meters.SerialStatus": {
+            "type": "object",
+            "properties": {
+                "connected": {
+                    "type": "boolean"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "string"
+                },
+                "since": {
+                    "type": "string"
                 }
             }
         },
