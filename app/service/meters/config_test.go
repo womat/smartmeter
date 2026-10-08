@@ -89,3 +89,35 @@ func TestCompileDeviceRejectsUnknownField(t *testing.T) {
 		t.Errorf("compileDevice() = %v, want unsupported canonical field", err)
 	}
 }
+
+func TestApplyDefaultsLimits(t *testing.T) {
+	m := MeterConfig{MaxCurrent: 20}
+	m.ApplyDefaults()
+	if m.Limits != (LimitsConfig{ImportPower: 13800, ExportPower: 13800, Current: 20}) {
+		t.Errorf("Limits = %+v, want 3 x 230 V x 20 A and 20 A", m.Limits)
+	}
+
+	m = MeterConfig{}
+	m.ApplyDefaults()
+	if m.Limits.Current != 63 {
+		t.Errorf("Limits.Current = %g without maxCurrent, want 63", m.Limits.Current)
+	}
+
+	m = MeterConfig{MaxCurrent: 63, Limits: LimitsConfig{ImportPower: 15000, ExportPower: 4500, Current: 20}}
+	m.ApplyDefaults()
+	if m.Limits != (LimitsConfig{ImportPower: 15000, ExportPower: 4500, Current: 20}) {
+		t.Errorf("Limits = %+v, configured values must stay", m.Limits)
+	}
+}
+
+func TestStale(t *testing.T) {
+	zero, minute := time.Duration(0), time.Minute
+	for _, tc := range []struct {
+		set  *time.Duration
+		want time.Duration
+	}{{nil, 30 * time.Second}, {&zero, 0}, {&minute, time.Minute}} {
+		if got := (MeterConfig{StaleTimeout: tc.set}).Stale(); got != tc.want {
+			t.Errorf("Stale() = %s, want %s", got, tc.want)
+		}
+	}
+}

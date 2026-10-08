@@ -15,7 +15,7 @@ import (
 // HandleHealth returns the current health data of the application.
 //
 //	@Summary		Get health data
-//	@Description	Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the time and age of the last valid snapshot, the last error and the snapshots discarded as implausible, and the state of the RTU port.
+//	@Description	Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the source, the served values, the time, age and read duration of the last valid snapshot, whether the unit IDs answer, the last error, the snapshots discarded as implausible and the limits for the web page, the state of the RTU port and the Modbus listeners with their request counters.
 //	@Tags			info
 //	@Produce		json
 //	@Security		ApiKeyAuth
@@ -28,6 +28,7 @@ func (app *App) HandleHealth() http.Handler {
 			resp := health.GetCurrentHealth(MODULE, VERSION)
 			resp.Meters = app.modbusClient.Status(time.Now())
 			resp.RTU = app.modbusServer.Status()
+			resp.Modbus = app.modbusServer.Activity()
 			web.Encode(w, http.StatusOK, resp)
 		},
 	)

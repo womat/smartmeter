@@ -54,21 +54,40 @@ type compiledDevice struct {
 	Reader           registerReader
 
 	mu            sync.Mutex // guards the fields below, read by Status from the web server
+	started       time.Time  // start of polling, the reference for staleTimeout before the first snapshot
 	lastSuccess   time.Time  // last snapshot written to the Modbus server
-	lastError     string     // last failed or discarded poll
+	lastValues    map[string]float64
+	latency       time.Duration // duration of the last successful read of the source
+	polls         uint64        // successful polls, for the activity LED of the web page
+	lastError     string        // last failed or discarded poll
 	lastErrorTime time.Time
-	discarded     uint64 // snapshots discarded by the plausibility check
+	discarded     uint64    // snapshots discarded by the plausibility check
+	online        bool      // the unit IDs answer; false until the first snapshot and after staleTimeout
+	offlineSince  time.Time // when the unit IDs went silent after staleTimeout
 }
 
 // MeterStatus is the diagnostic state of one meter, reported by /health.
 type MeterStatus struct {
 	UnitIDs       []int      `json:"unitIDs"`                 // Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)
+	Source        string     `json:"source"`                  // Upstream meter, e.g. "tcp 192.168.1.10:502 unit 1"
 	Ready         bool       `json:"ready"`                   // Values are current, see staleAfter
+	Online        bool       `json:"online"`                  // The unit IDs answer, see staleTimeout
+	OfflineSince  *time.Time `json:"offlineSince,omitempty"`  // When the unit IDs went silent after staleTimeout
 	LastSuccess   *time.Time `json:"lastSuccess,omitempty"`   // Last valid snapshot from the source
 	AgeSeconds    *float64   `json:"ageSeconds,omitempty"`    // Age of the served values
+	LatencyMs     *float64   `json:"latencyMs,omitempty"`     // Duration of the last successful read of the source
+	Polls         uint64     `json:"polls"`                   // Successful polls since start
 	LastError     string     `json:"lastError,omitempty"`     // Last failed or discarded poll
 	LastErrorTime *time.Time `json:"lastErrorTime,omitempty"` // Time of LastError
 	Discarded     uint64     `json:"discardedSnapshots"`      // Snapshots discarded as implausible
+
+	PollIntervalSeconds float64      `json:"pollIntervalSeconds"` // Poll interval of the source
+	StaleTimeoutSeconds float64      `json:"staleTimeoutSeconds"` // 0 = the unit IDs never go silent
+	MaxCurrent          float64      `json:"maxCurrent"`          // A per phase, plausibility check
+	Limits              LimitsConfig `json:"limits"`              // Scale of the web page
+
+	// Values are the canonical fields of the last valid snapshot, as served on the unit IDs.
+	Values map[string]float64 `json:"values,omitempty"`
 }
 
 // staleAfter is how many poll intervals the served values may be old before the meter
@@ -77,6 +96,7 @@ const staleAfter = 3
 
 type snapshotWriter interface {
 	WriteSnapshot(unitID uint8, snapshot fronius.Snapshot) error
+	SetOnline(unitID uint8, online bool) error
 }
 
 type ModbusService struct {
@@ -278,6 +298,10 @@ func buildReadBlocks(mappings []compiledMapping, maxGap, maxSize int) []readBloc
 }
 
 func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
+	d.mu.Lock()
+	d.started = time.Now()
+	d.mu.Unlock()
+
 	if err := d.pollAndUpdate(writer); err != nil {
 		slog.Error("Initial Modbus poll failed", "meter", d.Config.Name, "error", err)
 	}
@@ -293,16 +317,70 @@ func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 			if err := d.pollAndUpdate(writer); err != nil {
 				slog.Error("Modbus poll failed", "meter", d.Config.Name, "error", err)
 			}
+			d.checkStale(writer, time.Now())
 		}
 	}
 }
 
+// checkStale takes the unit IDs off the bus once the source has delivered no valid snapshot for
+// staleTimeout, so the inverter sees a failed meter instead of acting on frozen values. The
+// registers keep the last values; the next valid snapshot brings the unit IDs back.
+func (d *compiledDevice) checkStale(writer snapshotWriter, now time.Time) {
+	timeout := d.Config.Stale()
+	d.mu.Lock()
+	since := d.lastSuccess
+	if since.IsZero() {
+		since = d.started
+	}
+	expired := timeout > 0 && d.online && now.Sub(since) > timeout
+	if expired {
+		d.online = false
+		d.offlineSince = now
+	}
+	d.mu.Unlock()
+	if !expired {
+		return
+	}
+
+	if err := d.setOnline(writer, false); err != nil {
+		slog.Error("Failed to take the unit IDs off the bus", "meter", d.Config.Name, "error", err)
+		return
+	}
+	slog.Warn("No valid values from the source, unit IDs no longer answer",
+		"meter", d.Config.Name, "unitIDs", d.unitIDs(), "staleTimeout", timeout, "lastValid", d.lastSuccessTime())
+}
+
+func (d *compiledDevice) setOnline(writer snapshotWriter, online bool) error {
+	var errs error
+	for _, id := range d.Config.UnitIDs {
+		errs = errors.Join(errs, writer.SetOnline(id, online))
+	}
+	return errs
+}
+
+// unitIDs returns the unit IDs as numbers for logging; slog prints []uint8 as bytes.
+func (d *compiledDevice) unitIDs() []int {
+	ids := make([]int, 0, len(d.Config.UnitIDs))
+	for _, id := range d.Config.UnitIDs {
+		ids = append(ids, int(id))
+	}
+	return ids
+}
+
+func (d *compiledDevice) lastSuccessTime() time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.lastSuccess
+}
+
 func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
+	start := time.Now()
 	snapshot, err := d.pollSnapshot()
 	if err != nil {
 		d.recordError(err, false)
 		return err
 	}
+	latency := time.Since(start)
 
 	// Discard spikes from the source; the last valid values stay in place.
 	if err = checkPlausibility(snapshot, d.Config.MaxCurrent); err != nil {
@@ -324,8 +402,24 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 
 	d.mu.Lock()
 	d.lastSuccess = time.Now()
+	d.lastValues = snapshotValues(snapshot)
+	delete(d.lastValues, string(fronius.FieldModbusAddr)) // differs per unit ID, see the loop above
+	d.latency = latency
+	d.polls++
+	wasOnline := d.online
+	d.online = true
+	d.offlineSince = time.Time{}
 	d.mu.Unlock()
-	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIDs", d.Config.UnitIDs)
+
+	// The registers hold current values now, so the unit IDs may answer: at start, or after
+	// staleTimeout took them off the bus.
+	if !wasOnline {
+		if err = d.setOnline(writer, true); err != nil {
+			return fmt.Errorf("bring unit IDs online: %w", err)
+		}
+		slog.Info("Valid values from the source, unit IDs answer", "meter", d.Config.Name, "unitIDs", d.unitIDs())
+	}
+	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIDs", d.unitIDs())
 	return nil
 }
 
@@ -344,17 +438,27 @@ func (d *compiledDevice) status(now time.Time) MeterStatus {
 	defer d.mu.Unlock()
 
 	st := MeterStatus{
-		UnitIDs:   make([]int, 0, len(d.Config.UnitIDs)),
-		LastError: d.lastError,
-		Discarded: d.discarded,
+		Source:              d.Config.Source.String(),
+		Online:              d.online,
+		Polls:               d.polls,
+		LastError:           d.lastError,
+		Discarded:           d.discarded,
+		PollIntervalSeconds: d.Config.Poll.Interval.Seconds(),
+		StaleTimeoutSeconds: d.Config.Stale().Seconds(),
+		MaxCurrent:          d.Config.MaxCurrent,
+		Limits:              d.Config.Limits,
+		Values:              d.lastValues, // replaced as a whole on every poll, never modified
 	}
-	for _, id := range d.Config.UnitIDs {
-		st.UnitIDs = append(st.UnitIDs, int(id))
+	if !d.offlineSince.IsZero() {
+		t := d.offlineSince
+		st.OfflineSince = &t
 	}
+	st.UnitIDs = d.unitIDs()
 	if !d.lastSuccess.IsZero() {
 		last := d.lastSuccess
 		age := now.Sub(last).Seconds()
-		st.LastSuccess, st.AgeSeconds = &last, &age
+		latency := float64(d.latency.Microseconds()) / 1000
+		st.LastSuccess, st.AgeSeconds, st.LatencyMs = &last, &age, &latency
 		st.Ready = now.Sub(last) <= staleAfter*d.Config.Poll.Interval
 	}
 	if !d.lastErrorTime.IsZero() {

@@ -3,8 +3,10 @@ package meters
 import (
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,9 +50,34 @@ type MeterConfig struct {
 	Name       string                   `yaml:"-"`          // Key in the meter map, set by Validate
 	UnitIDs    []uint8                  `yaml:"unitIDs"`    // Unit IDs the emulated meter answers on
 	MaxCurrent float64                  `yaml:"maxCurrent"` // Rated current per phase in A, 0 = no plausibility check
+	Limits     LimitsConfig             `yaml:"limits"`     // Limits of the installation, for the web page
 	Source     SourceConfig             `yaml:"source"`     // Upstream meter
 	Poll       PollConfig               `yaml:"poll"`       // Polling of the upstream meter
 	Map        map[string]MappingConfig `yaml:"map"`        // Canonical field name -> mapping
+
+	// StaleTimeout takes the unit IDs off the bus when the source has delivered no valid snapshot
+	// for this long: the inverter then sees a failed meter instead of frozen values. nil = 30s,
+	// 0 = never; the unit IDs always stay silent until the first valid snapshot.
+	StaleTimeout *time.Duration `yaml:"staleTimeout"`
+}
+
+// LimitsConfig holds the limits of the installation. They only scale the web page (power bar,
+// current bars) and are independent of maxCurrent, which drives the plausibility check.
+type LimitsConfig struct {
+	ImportPower float64 `yaml:"importPower" json:"importPower"` // W drawn from the grid at most, default 3 x 230 V x current
+	ExportPower float64 `yaml:"exportPower" json:"exportPower"` // W fed into the grid at most, default 3 x 230 V x current
+	Current     float64 `yaml:"current" json:"current"`         // A per phase, default maxCurrent or 63
+}
+
+// defaultStaleTimeout applies when staleTimeout is not set.
+const defaultStaleTimeout = 30 * time.Second
+
+// Stale returns the effective stale timeout; 0 means the unit IDs are never taken off the bus.
+func (m MeterConfig) Stale() time.Duration {
+	if m.StaleTimeout == nil {
+		return defaultStaleTimeout
+	}
+	return *m.StaleTimeout
 }
 
 // SourceConfig describes the connection to the upstream meter.
@@ -60,6 +87,18 @@ type SourceConfig struct {
 	Timeout time.Duration   `yaml:"timeout"` // Request timeout as Go duration string (e.g. 300ms)
 	TCP     TCPSourceConfig `yaml:"tcp"`     // Used with type tcp
 	RTU     SerialConfig    `yaml:"rtu"`     // Used with type rtu
+}
+
+// String describes the source for the web page, e.g. "tcp 192.168.1.10:502 unit 1".
+func (s SourceConfig) String() string {
+	switch strings.ToLower(s.Type) {
+	case "tcp":
+		return fmt.Sprintf("tcp %s unit %d", net.JoinHostPort(s.TCP.Host, strconv.Itoa(s.TCP.Port)), s.UnitID)
+	case "rtu":
+		return fmt.Sprintf("rtu %s unit %d", s.RTU.Port, s.UnitID)
+	default:
+		return s.Type
+	}
 }
 
 // TCPSourceConfig holds the address of a Modbus TCP upstream meter.
@@ -128,6 +167,19 @@ func (m *MeterConfig) ApplyDefaults() {
 		m.Poll.MaxBlockSize = 125
 	}
 
+	if m.Limits.Current == 0 {
+		m.Limits.Current = m.MaxCurrent
+		if m.Limits.Current == 0 {
+			m.Limits.Current = 63
+		}
+	}
+	if m.Limits.ImportPower == 0 {
+		m.Limits.ImportPower = 3 * 230 * m.Limits.Current
+	}
+	if m.Limits.ExportPower == 0 {
+		m.Limits.ExportPower = 3 * 230 * m.Limits.Current
+	}
+
 	switch strings.ToLower(m.Source.Type) {
 	case "tcp":
 		if m.Source.TCP.Port == 0 {
@@ -171,6 +223,12 @@ func (m MeterConfig) Validate() error {
 	}
 	if m.MaxCurrent < 0 {
 		return fmt.Errorf("invalid maxCurrent %g", m.MaxCurrent)
+	}
+	if m.Limits.ImportPower < 0 || m.Limits.ExportPower < 0 || m.Limits.Current < 0 {
+		return fmt.Errorf("invalid limits %+v, must not be negative", m.Limits)
+	}
+	if m.StaleTimeout != nil && *m.StaleTimeout < 0 {
+		return fmt.Errorf("invalid staleTimeout %s", *m.StaleTimeout)
 	}
 	if m.Source.UnitID == 0 || m.Source.UnitID > 247 {
 		return fmt.Errorf("invalid source.unitID %d, must be 1-247", m.Source.UnitID)

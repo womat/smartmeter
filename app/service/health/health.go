@@ -33,6 +33,10 @@ type Model struct {
 	// RTU is the state of the serial port towards the inverter, empty without RTU listener.
 	// Filled in by the caller.
 	RTU []meters.SerialStatus `json:"rtu,omitempty"`
+
+	// Modbus describes the listeners towards the inverter and the TCP clients and counts the
+	// requests they answered. Filled in by the caller.
+	Modbus meters.Activity `json:"modbus"`
 }
 
 var startTime = time.Now() // Tracks application start time

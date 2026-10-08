@@ -93,6 +93,16 @@ listen:
 #                  |power per phase|   > 253 V * maxCurrent * 1.2   (63 A: ~19 kW)
 #                  |total power|       > 3 * the limit per phase    (63 A: ~57 kW)
 #                0 or unset = no check.
+# staleTimeout - Go duration (default 30s). Without a valid snapshot from the source for this
+#                long, the unit IDs stop answering (RTU silent, TCP exception 11): the
+#                inverter then sees a failed meter instead of acting on frozen values. The next
+#                valid snapshot brings them back. 0s = keep answering with the last values.
+#                The unit IDs never answer before the first valid snapshot.
+# limits       - Limits of the installation; they only scale the web page.
+#   importPower  - W drawn from the grid at most (default 3 * 230 V * current)
+#   exportPower  - W fed into the grid at most, e.g. the inverter's export limit
+#                  (default 3 * 230 V * current)
+#   current      - A per phase, e.g. the main fuse (default maxCurrent, else 63)
 #
 # source       - Upstream meter
 #   type       - tcp | rtu
@@ -127,6 +137,11 @@ meter:
   primary_meter:
     unitIDs: [ 1, 200 ]
     maxCurrent: 63
+    staleTimeout: 30s
+    limits:
+      importPower: 15000
+      exportPower: 4500
+      current: 20
 
     source:
       type: tcp

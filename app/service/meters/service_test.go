@@ -16,9 +16,13 @@ import (
 
 type fakeRegisterReader struct {
 	registers map[uint16]uint16
+	err       error // returned by every read while set, like an unreachable source
 }
 
 func (r *fakeRegisterReader) ReadHoldingRegisters(address, quantity uint16) ([]uint16, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
 	data := make([]uint16, quantity)
 	for i := uint16(0); i < quantity; i++ {
 		data[i] = r.registers[address+i]
@@ -426,4 +430,120 @@ func (s *ModbusServerService) holdingRegister(unitID uint8, addr uint16) (uint16
 		return 0, err
 	}
 	return regs[0], nil
+}
+
+// staleTestDevice is a meter on unit ID 1 reading power_total from register 0, with the server
+// in the state NewModbusServerService leaves it: unit ID 1 silent until the first snapshot.
+func staleTestDevice(t *testing.T, staleTimeout *time.Duration) (*compiledDevice, *fakeRegisterReader, *ModbusServerService) {
+	t.Helper()
+	device, err := compileDevice(MeterConfig{
+		Name:         "m",
+		UnitIDs:      []uint8{1},
+		StaleTimeout: staleTimeout,
+		Source:       SourceConfig{Type: "tcp", UnitID: 1, TCP: TCPSourceConfig{Host: "192.0.2.1", Port: 502}},
+		Poll:         PollConfig{Interval: time.Second, MaxBlockSize: 125},
+		Map:          map[string]MappingConfig{"power_total": {Type: "register", Address: 0, DType: "int32", ByteOrder: "big", WordOrder: "big"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &fakeRegisterReader{registers: map[uint16]uint16{0: 0, 1: 1500}}
+	device.Reader = reader
+	device.started = time.Now()
+
+	server := newTestServer()
+	t.Cleanup(func() { _ = server.Close() })
+	if err = server.SetOnline(1, false); err != nil {
+		t.Fatal(err)
+	}
+	return device, reader, server
+}
+
+func TestStatusReportsServedValues(t *testing.T) {
+	device, _, server := staleTestDevice(t, nil)
+
+	st := device.status(time.Now())
+	if st.Online || st.Values != nil || st.LatencyMs != nil || st.Polls != 0 {
+		t.Errorf("status before the first snapshot = %+v, want offline without values", st)
+	}
+	if st.Source != "tcp 192.0.2.1:502 unit 1" || st.StaleTimeoutSeconds != 30 || st.PollIntervalSeconds != 1 {
+		t.Errorf("status = %+v, want source, default staleTimeout 30 s and interval 1 s", st)
+	}
+
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatal(err)
+	}
+	st = device.status(time.Now())
+	if !st.Online || st.Polls != 1 || st.LatencyMs == nil || st.Values["power_total"] != 1500 {
+		t.Errorf("status after a snapshot = %+v, want online, 1 poll, a latency and power_total 1500", st)
+	}
+	if _, ok := st.Values["modbus_addr"]; ok {
+		t.Error("Values contains modbus_addr, which differs per unit ID")
+	}
+	if !server.server.Online(1) {
+		t.Error("unit ID 1 is still silent after the first valid snapshot")
+	}
+}
+
+func TestStaleTimeoutTakesUnitsOffTheBus(t *testing.T) {
+	timeout := 30 * time.Second
+	device, reader, server := staleTestDevice(t, &timeout)
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatal(err)
+	}
+	last := device.lastSuccessTime()
+
+	reader.err = errors.New("i/o timeout")
+	if err := device.pollAndUpdate(server); err == nil {
+		t.Fatal("pollAndUpdate() = nil with a failing source")
+	}
+	device.checkStale(server, last.Add(29*time.Second))
+	if !server.server.Online(1) {
+		t.Fatal("unit ID 1 silent before staleTimeout")
+	}
+	device.checkStale(server, last.Add(31*time.Second))
+	if server.server.Online(1) {
+		t.Fatal("unit ID 1 still answers after staleTimeout")
+	}
+	if st := device.status(last.Add(31 * time.Second)); st.Online || st.OfflineSince == nil || st.Values["power_total"] != 1500 {
+		t.Errorf("status = %+v, want offline since now, last values kept", st)
+	}
+	// power_total 1500 W at SF -2: 150000 = 0x000249F0, high word first.
+	if regs, _ := server.server.HoldingRegisters(1, 4116, 2); regs[0] != 0x0002 || regs[1] != 0x49F0 {
+		t.Errorf("registers 4116/4117 = %v, want the last values kept while silent", regs)
+	}
+
+	reader.err = nil
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatal(err)
+	}
+	if !server.server.Online(1) || device.status(time.Now()).OfflineSince != nil {
+		t.Error("unit ID 1 not back after a valid snapshot")
+	}
+}
+
+func TestStaleTimeoutZeroKeepsAnswering(t *testing.T) {
+	never := time.Duration(0)
+	device, reader, server := staleTestDevice(t, &never)
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatal(err)
+	}
+	reader.err = errors.New("i/o timeout")
+	device.checkStale(server, time.Now().Add(time.Hour))
+	if !server.server.Online(1) {
+		t.Error("staleTimeout 0 took unit ID 1 off the bus")
+	}
+}
+
+func TestStaleTimeoutBeforeFirstSnapshot(t *testing.T) {
+	timeout := 30 * time.Second
+	device, reader, server := staleTestDevice(t, &timeout)
+	reader.err = errors.New("connection refused")
+	device.checkStale(server, time.Now().Add(time.Minute))
+	if server.server.Online(1) {
+		t.Error("unit ID 1 answers without any valid snapshot")
+	}
+	if st := device.status(time.Now()); st.OfflineSince != nil {
+		t.Errorf("OfflineSince = %v, want nil: the unit ID never answered", st.OfflineSince)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/womat/smartmeter/app/service/meters"
 )
@@ -112,6 +113,7 @@ func TestLoadConfigRejectsDurationWithoutUnit(t *testing.T) {
 		"poll interval":  "meter:\n  m:\n    poll:\n      interval: 1\n",
 		"source timeout": "meter:\n  m:\n    source:\n      timeout: 300\n",
 		"frame delay":    "listen:\n  rtu:\n    interFrameDelay: 20\n",
+		"stale timeout":  "meter:\n  m:\n    staleTimeout: 30\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := LoadConfig(writeConfig(t, content))
@@ -119,6 +121,23 @@ func TestLoadConfigRejectsDurationWithoutUnit(t *testing.T) {
 				t.Errorf("err = %v, want a refused duration", err)
 			}
 		})
+	}
+}
+
+func TestLoadConfigStaleTimeoutAndLimits(t *testing.T) {
+	cfg, err := LoadConfig(writeConfig(t, "meter:\n  a:\n    staleTimeout: 0s\n    limits:\n      importPower: 15000\n      exportPower: 4500\n      current: 20\n  b:\n    unitIDs: [2]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := cfg.Meter["a"], cfg.Meter["b"]
+	if a.StaleTimeout == nil || *a.StaleTimeout != 0 || a.Stale() != 0 {
+		t.Errorf("staleTimeout 0s = %v, want an explicit 0 (never)", a.StaleTimeout)
+	}
+	if b.StaleTimeout != nil || b.Stale() != 30*time.Second {
+		t.Errorf("staleTimeout unset = %v, want nil and the 30 s default", b.StaleTimeout)
+	}
+	if a.Limits != (meters.LimitsConfig{ImportPower: 15000, ExportPower: 4500, Current: 20}) {
+		t.Errorf("limits = %+v", a.Limits)
 	}
 }
 
