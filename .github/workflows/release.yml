@@ -41,6 +41,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # the newest patch release, not the one cached on the runner: govulncheck
+          # flags a standard library fixed in a newer patch
+          check-latest: true
           cache: true
 
       # Runs natively on the runner; also generates the embedded dev certificates.
