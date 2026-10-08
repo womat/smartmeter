@@ -67,20 +67,16 @@ func NewModbusService(config *Config) (*ModbusService, error) {
 		return nil, nil
 	}
 
-	service := &ModbusService{}
-	seenUnitIDs := make(map[uint8]struct{}, len(config.Devices))
+	if err := checkUniqueUnitIDs(config.Devices); err != nil {
+		return nil, err
+	}
 
+	service := &ModbusService{}
 	for i := range config.Devices {
 		device, err := compileDevice(config.Devices[i])
 		if err != nil {
 			return nil, fmt.Errorf("device %q: %w", config.Devices[i].Name, err)
 		}
-
-		if _, exists := seenUnitIDs[device.Config.UnitID]; exists {
-			return nil, fmt.Errorf("duplicate unitId %d", device.Config.UnitID)
-		}
-		seenUnitIDs[device.Config.UnitID] = struct{}{}
-
 		service.devices = append(service.devices, device)
 	}
 
@@ -251,12 +247,17 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 		return err
 	}
 
-	if err = writer.WriteSnapshot(d.Config.UnitID, snapshot); err != nil {
-		return err
+	// The same snapshot is served on every unit ID; only the SunSpec
+	// Modbus address (40068) differs per unit ID.
+	for _, id := range d.Config.UnitIDs {
+		snapshot.Set(fronius.FieldModbusAddr, float64(id))
+		if err = writer.WriteSnapshot(id, snapshot); err != nil {
+			return fmt.Errorf("unitId %d: %w", id, err)
+		}
 	}
 
 	d.LastSuccess = time.Now()
-	slog.Debug("Modbus snapshot updated", "device", d.Config.Name, "unitId", d.Config.UnitID)
+	slog.Debug("Modbus snapshot updated", "device", d.Config.Name, "unitIds", d.Config.UnitIDs)
 	return nil
 }
 
@@ -294,7 +295,7 @@ func (d *compiledDevice) pollSnapshot() (fronius.Snapshot, error) {
 		return fronius.Snapshot{}, err
 	}
 
-	applyDerivedFields(&snapshot, d.Config.UnitID)
+	applyDerivedFields(&snapshot)
 	return snapshot, nil
 }
 
@@ -336,7 +337,7 @@ func applyExpressionMappings(snapshot *fronius.Snapshot, mappings []compiledMapp
 	return nil
 }
 
-func applyDerivedFields(snapshot *fronius.Snapshot, unitID uint8) {
+func applyDerivedFields(snapshot *fronius.Snapshot) {
 	if !snapshot.Has(fronius.FieldDeviceID) {
 		snapshot.Set(fronius.FieldDeviceID, defaultDeviceID)
 	}
@@ -349,7 +350,6 @@ func applyDerivedFields(snapshot *fronius.Snapshot, unitID uint8) {
 	if !snapshot.HasString(fronius.FieldSerialStr) {
 		snapshot.SetString(fronius.FieldSerialStr, strconv.FormatInt(int64(math.Round(snapshot.Float64(fronius.FieldSerialNumber))), 10))
 	}
-	snapshot.Set(fronius.FieldModbusAddr, float64(unitID))
 
 	for _, field := range []fronius.CanonicalField{fronius.FieldPFL1, fronius.FieldPFL2, fronius.FieldPFL3} {
 		if !snapshot.Has(field) {

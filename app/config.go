@@ -60,11 +60,11 @@ type ListenRTUConfig struct {
 }
 
 type DeviceConfig struct {
-	Name   string                   `yaml:"name"`
-	UnitID uint8                    `yaml:"unitId"`
-	Source SourceConfig             `yaml:"source"`
-	Poll   PollConfig               `yaml:"poll"`
-	Map    map[string]MappingConfig `yaml:"map"`
+	Name    string                   `yaml:"name"`
+	UnitIDs []uint8                  `yaml:"unitIds"` // unit IDs the emulated meter answers on
+	Source  SourceConfig             `yaml:"source"`
+	Poll    PollConfig               `yaml:"poll"`
+	Map     map[string]MappingConfig `yaml:"map"`
 }
 
 type SourceConfig struct {
@@ -194,6 +194,20 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	return checkUniqueUnitIDs(c.Devices)
+}
+
+// checkUniqueUnitIDs ensures that every unit ID is served by exactly one device.
+func checkUniqueUnitIDs(devices []DeviceConfig) error {
+	owner := make(map[uint8]string)
+	for _, device := range devices {
+		for _, id := range device.UnitIDs {
+			if name, exists := owner[id]; exists {
+				return fmt.Errorf("unitId %d is used by device %q and device %q", id, name, device.Name)
+			}
+			owner[id] = device.Name
+		}
+	}
 	return nil
 }
 
@@ -246,8 +260,13 @@ func (c *Config) validateDevice(device DeviceConfig) error {
 	if device.Name == "" {
 		return errors.New("device name is required")
 	}
-	if device.UnitID == 0 || device.UnitID > 247 {
-		return fmt.Errorf("device %q has invalid unitId %d", device.Name, device.UnitID)
+	if len(device.UnitIDs) == 0 {
+		return fmt.Errorf("device %q requires at least one entry in unitIds", device.Name)
+	}
+	for _, id := range device.UnitIDs {
+		if id == 0 || id > 247 {
+			return fmt.Errorf("device %q has invalid unitId %d", device.Name, id)
+		}
 	}
 	if device.Source.UnitID == 0 || device.Source.UnitID > 247 {
 		return fmt.Errorf("device %q has invalid source unitId %d", device.Name, device.Source.UnitID)

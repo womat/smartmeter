@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -42,8 +43,8 @@ func TestBuildReadBlocks(t *testing.T) {
 
 func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 	device, err := compileDevice(DeviceConfig{
-		Name:   "main_meter",
-		UnitID: 200,
+		Name:    "main_meter",
+		UnitIDs: []uint8{200},
 		Source: SourceConfig{
 			Type:    "tcp",
 			UnitID:  1,
@@ -150,10 +151,10 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 	}
 
 	device, err := compileDevice(DeviceConfig{
-		Name:   "primary_meter",
-		UnitID: 1,
-		Source: SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
-		Poll:   PollConfig{Interval: time.Second, MaxBlockGap: 4, MaxBlockSize: 125},
+		Name:    "primary_meter",
+		UnitIDs: []uint8{1, 200},
+		Source:  SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
+		Poll:    PollConfig{Interval: time.Second, MaxBlockGap: 4, MaxBlockSize: 125},
 		Map: map[string]MappingConfig{
 			"energy_import": reg(40999, "uint64", 0),
 			"energy_export": reg(41003, "uint64", 0),
@@ -197,14 +198,28 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 
 	server := &ModbusServerService{server: mbserver.NewServer()}
 	defer server.Close()
+	if err := server.server.NewDevice(200); err != nil {
+		t.Fatalf("NewDevice() error = %v", err)
+	}
 
 	if err := device.pollAndUpdate(server); err != nil {
 		t.Fatalf("pollAndUpdate() error = %v", err)
 	}
 
+	// Every unit ID serves the same values; only the SunSpec Modbus address differs.
+	for _, unitID := range []uint8{1, 200} {
+		t.Run(fmt.Sprintf("unit%d", unitID), func(t *testing.T) {
+			checkLegacyFroniusMap(t, server, unitID)
+		})
+	}
+}
+
+func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitID uint8) {
+	t.Helper()
+
 	get := func(addr uint16) uint16 {
 		t.Helper()
-		v, err := server.server.GetHoldingRegister(1, addr)
+		v, err := server.server.GetHoldingRegister(unitID, addr)
 		if err != nil {
 			t.Fatalf("GetHoldingRegister(%d) error = %v", addr, err)
 		}
@@ -248,7 +263,10 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 		}
 	}
 
-	// SunSpec block: PF in percent with PF_SF -1 and end block after the meter model.
+	// SunSpec block: own Modbus address, PF in percent with PF_SF -1 and end block after the meter model.
+	if got := get(40068); got != uint16(unitID) {
+		t.Errorf("register 40068 (DA) = %d, want %d", got, unitID)
+	}
 	if got := int16(get(40103)); got != 820 {
 		t.Errorf("register 40103 (PFphA) = %d, want 820", got)
 	}

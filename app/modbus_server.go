@@ -23,18 +23,19 @@ func NewModbusServerService(config *Config) (*ModbusServerService, error) {
 		return nil, nil
 	}
 
+	if err := checkUniqueUnitIDs(config.Devices); err != nil {
+		return nil, err
+	}
+
 	service := &ModbusServerService{server: mbserver.NewServer()}
-	seenUnitIDs := make(map[uint8]struct{}, len(config.Devices))
-
 	for _, device := range config.Devices {
-		if _, exists := seenUnitIDs[device.UnitID]; exists {
-			return nil, fmt.Errorf("duplicate unitId %d", device.UnitID)
-		}
-		seenUnitIDs[device.UnitID] = struct{}{}
-
-		if device.UnitID != 1 {
-			if err := service.server.NewDevice(device.UnitID); err != nil {
-				return nil, fmt.Errorf("create Modbus device %d: %w", device.UnitID, err)
+		for _, id := range device.UnitIDs {
+			// unit ID 1 is created by mbserver.NewServer
+			if id == 1 {
+				continue
+			}
+			if err := service.server.NewDevice(id); err != nil {
+				return nil, fmt.Errorf("create Modbus device %d: %w", id, err)
 			}
 		}
 	}

@@ -126,14 +126,17 @@ listen:
 
 # -----------------------------------------------------------------------------
 # devices — Liste der emulierten Smart Meter
-# Jeder Eintrag ist ein eigenständiger Modbus-Slave.
+# Jeder Eintrag ist ein emulierter Zähler mit eigener Quelle und eigenen Unit-IDs.
 # -----------------------------------------------------------------------------
 devices:
   # ---------------------------------------------------------------------------
   # Device 1: Hauptzähler — Quellzähler via Modbus RTU
   # ---------------------------------------------------------------------------
   - name: "main_meter"
-    unitId: 200
+    # Unit-IDs, unter denen dieses Gerät antwortet (1–247, über alle
+    # Geräte eindeutig). Alle IDs liefern dieselben Werte, erreichbar über
+    # RTU und TCP. Üblich: 1 = Wechselrichter (RS485), 200 = Fronius über TCP.
+    unitIds: [200]
 
     # -------------------------------------------------------------------------
     # source — Upstream-Verbindung zum echten Zähler
@@ -302,7 +305,7 @@ devices:
   # (auskommentiert — als Vorlage)
   # ---------------------------------------------------------------------------
   # - name: "sub_meter"
-  #   unitId: 201
+  #   unitIds: [201]
   #
   #   source:
   #     type: tcp
