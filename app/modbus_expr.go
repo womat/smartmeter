@@ -15,7 +15,7 @@ type exprParser struct {
 }
 
 func evalExpression(expr string, vars map[string]float64) (float64, error) {
-	replacer := strings.NewReplacer("{", "", "}", "")
+	replacer := strings.NewReplacer("${", "", "{", "", "}", "")
 	p := &exprParser{
 		input: replacer.Replace(expr),
 		vars:  vars,

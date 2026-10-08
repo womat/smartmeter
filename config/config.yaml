@@ -92,8 +92,9 @@ webserver:
 #   register  Wert wird aus Quellregister gelesen
 #   fixed     Fixer Wert, kein Quellzähler nötig
 #   expr      Berechnung aus anderen kanonischen Feldern
-#             Syntax: "${field1} + ${field2} * 0.5"
-#             Operatoren: + - * /  und Klammerung
+#             Syntax: "{field1} + {field2} * 0.5"
+#             (nicht "${field}" — das wird beim Laden als Umgebungsvariable expandiert)
+#             Operatoren: + - * /  und Klammerung, Funktionen SQRT() ABS()
 #             Hinweis: referenzierte Felder müssen im selben Device definiert sein
 #
 # Für type: register
@@ -364,7 +365,7 @@ devices:
   #       scale: 0
   #     power_total:
   #       type: expr
-  #       expr: "${power_l1} + ${power_l2} + ${power_l3}"
+  #       expr: "{power_l1} + {power_l2} + {power_l3}"
   #     energy_import:
   #       type: register
   #       address: 0

@@ -88,10 +88,10 @@ func (app *App) Run() (*App, error) {
 
 	// here start your services
 	if len(app.config.Devices) > 0 {
-		//	if err := app.modbusServer.Start(app.config.Listen); err != nil {
-		//		slog.Error("Error starting modbus server", "error", err.Error())
-		//		return app, err
-		//	}
+		if err := app.modbusServer.Start(app.config.Listen); err != nil {
+			slog.Error("Error starting modbus server", "error", err.Error())
+			return app, err
+		}
 		if err := app.modbusClient.Start(app.ctx, app.modbusServer); err != nil {
 			slog.Error("Error starting modbus polling service", "error", err.Error())
 			return app, err
