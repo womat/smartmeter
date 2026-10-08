@@ -36,6 +36,13 @@ Die genauen Befehle stehen im [Quick start](README.md#quick-start), alle Einstel
 [Configuration](README.md#configuration), die Herkunft der Registertabellen unter
 [Register maps](README.md#register-maps).
 
+## Hinweis
+
+smartmeter ist ein unabhängiges Projekt und steht in keiner Verbindung zur Fronius International
+GmbH. Der Wechselrichter regelt mit den Werten des Zählers, etwa die dynamische
+Einspeisebegrenzung. Falsch konfigurierte Werte führen zu falschen Regelentscheidungen – vor dem
+Einsatz die Werte mit dem Quellzähler und dem Webinterface des Wechselrichters vergleichen.
+
 ## Lizenz
 
 MIT, siehe [`LICENSE`](LICENSE).

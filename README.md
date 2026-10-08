@@ -582,6 +582,19 @@ Building from source needs Go and `make`: clone the repository and run `make hel
 
 ---
 
+## Disclaimer
+
+smartmeter is an independent project and is not affiliated with, endorsed or supported by
+Fronius International GmbH. "Fronius" and product names are used only to describe compatibility.
+
+The inverter controls with the values it reads from the meter — for example a dynamic feed-in
+limitation or battery charging. Wrong values (a misconfigured `map`, a wrong scale or sign) lead
+to wrong control decisions. Verify the readings against the upstream meter and the inverter's web
+interface before relying on them, especially where a grid operator requires a feed-in limit.
+The software is provided as is, without warranty (see [`LICENSE`](LICENSE)).
+
+---
+
 ## License
 
 smartmeter is released under the MIT License - see [`LICENSE`](LICENSE) for the full text.
