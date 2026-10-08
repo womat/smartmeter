@@ -22,7 +22,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, and OS.",
+                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, and per meter the unit IDs, the time and age of the last valid snapshot, the last error and the snapshots discarded as implausible.",
                 "produces": [
                     "application/json"
                 ],
@@ -40,7 +40,36 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/web.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "description": "Returns 200 while every meter serves current values, 503 while a meter has delivered no valid snapshot for three poll intervals. No authentication required.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "info"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "Application is ready",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Values of a meter are outdated",
+                        "schema": {
+                            "$ref": "#/definitions/web.ApiError"
                         }
                     }
                 }
@@ -99,6 +128,13 @@ const docTemplate = `{
                     "description": "Machine name where the app runs",
                     "type": "string"
                 },
+                "meters": {
+                    "description": "Meters holds the diagnostic state per meter name: unit IDs, the last valid snapshot,\nthe last error and the snapshots discarded as implausible. Filled in by the caller.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/meters.MeterStatus"
+                    }
+                },
                 "numGoroutines": {
                     "description": "Current number of active goroutines",
                     "type": "integer"
@@ -118,6 +154,50 @@ const docTemplate = `{
                 "uptimeSeconds": {
                     "description": "Application uptime in seconds",
                     "type": "number"
+                }
+            }
+        },
+        "meters.MeterStatus": {
+            "type": "object",
+            "properties": {
+                "ageSeconds": {
+                    "description": "Age of the served values",
+                    "type": "number"
+                },
+                "discardedSnapshots": {
+                    "description": "Snapshots discarded as implausible",
+                    "type": "integer"
+                },
+                "lastError": {
+                    "description": "Last failed or discarded poll",
+                    "type": "string"
+                },
+                "lastErrorTime": {
+                    "description": "Time of LastError",
+                    "type": "string"
+                },
+                "lastSuccess": {
+                    "description": "Last valid snapshot from the source",
+                    "type": "string"
+                },
+                "ready": {
+                    "description": "Values are current, see staleAfter",
+                    "type": "boolean"
+                },
+                "unitIDs": {
+                    "description": "Unit IDs the meter answers on",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "web.ApiError": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
                 }
             }
         }

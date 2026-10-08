@@ -16,6 +16,13 @@ definitions:
       hostname:
         description: Machine name where the app runs
         type: string
+      meters:
+        additionalProperties:
+          $ref: '#/definitions/meters.MeterStatus'
+        description: |-
+          Meters holds the diagnostic state per meter name: unit IDs, the last valid snapshot,
+          the last error and the snapshots discarded as implausible. Filled in by the caller.
+        type: object
       numGoroutines:
         description: Current number of active goroutines
         type: integer
@@ -32,13 +39,45 @@ definitions:
         description: Application uptime in seconds
         type: number
     type: object
+  meters.MeterStatus:
+    properties:
+      ageSeconds:
+        description: Age of the served values
+        type: number
+      discardedSnapshots:
+        description: Snapshots discarded as implausible
+        type: integer
+      lastError:
+        description: Last failed or discarded poll
+        type: string
+      lastErrorTime:
+        description: Time of LastError
+        type: string
+      lastSuccess:
+        description: Last valid snapshot from the source
+        type: string
+      ready:
+        description: Values are current, see staleAfter
+        type: boolean
+      unitIDs:
+        description: Unit IDs the meter answers on
+        items:
+          type: integer
+        type: array
+    type: object
+  web.ApiError:
+    properties:
+      error:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
   /health:
     get:
       description: Retrieves memory usage, goroutine count, version, hostname, Go
-        runtime version, and OS.
+        runtime version, OS, and per meter the unit IDs, the time and age of the last
+        valid snapshot, the last error and the snapshots discarded as implausible.
       produces:
       - application/json
       responses:
@@ -49,10 +88,31 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/web.ApiError'
       security:
       - ApiKeyAuth: []
       summary: Get health data
+      tags:
+      - info
+  /ready:
+    get:
+      description: Returns 200 while every meter serves current values, 503 while
+        a meter has delivered no valid snapshot for three poll intervals. No authentication
+        required.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Application is ready
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Values of a meter are outdated
+          schema:
+            $ref: '#/definitions/web.ApiError'
+      summary: Readiness check
       tags:
       - info
   /version:
