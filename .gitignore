@@ -1,5 +1,7 @@
 /bin/
-/test.yaml
-/cmd/config.yaml
 .idea
 /app/certs/
+/config/*.pem
+/dist/
+/Makefile.local
+__pycache__/
