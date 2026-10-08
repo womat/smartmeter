@@ -11,7 +11,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the time and age of the last valid snapshot, the last error and the snapshots discarded as implausible, and the state of the RTU port.",
+                "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the source, the served values, the time, age and read duration of the last valid snapshot, whether the unit IDs answer, the last error, the snapshots discarded as implausible and the limits for the web page, the state of the RTU port and the Modbus listeners with their request counters.",
                 "produces": [
                     "application/json"
                 ],
@@ -57,6 +57,58 @@
                     },
                     "503": {
                         "description": "Values of a meter are outdated",
+                        "schema": {
+                            "$ref": "#/definitions/web.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/registers": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the proprietary Fronius map (read by the inverter) and the SunSpec block (read by wallboxes and evcc) of a unit ID, each register with address, canonical field, type, scale factor, raw words and decoded value, from one consistent copy.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "meters"
+                ],
+                "summary": "Get the registers of a unit ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Unit ID (1-247)",
+                        "name": "unit",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Registers of the unit ID",
+                        "schema": {
+                            "$ref": "#/definitions/meters.RegisterDump"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid unit ID",
+                        "schema": {
+                            "$ref": "#/definitions/web.ApiError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/web.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "No meter answers on this unit ID",
                         "schema": {
                             "$ref": "#/definitions/web.ApiError"
                         }
@@ -124,6 +176,14 @@
                         "$ref": "#/definitions/meters.MeterStatus"
                     }
                 },
+                "modbus": {
+                    "description": "Modbus describes the listeners towards the inverter and the TCP clients and counts the\nrequests they answered. Filled in by the caller.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meters.Activity"
+                        }
+                    ]
+                },
                 "numGoroutines": {
                     "description": "Current number of active goroutines",
                     "type": "integer"
@@ -153,6 +213,44 @@
                 }
             }
         },
+        "meters.Activity": {
+            "type": "object",
+            "properties": {
+                "rtu": {
+                    "description": "nil without RTU listener",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meters.RTUActivity"
+                        }
+                    ]
+                },
+                "tcp": {
+                    "description": "nil without TCP listener",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meters.TCPActivity"
+                        }
+                    ]
+                }
+            }
+        },
+        "meters.LimitsConfig": {
+            "type": "object",
+            "properties": {
+                "current": {
+                    "description": "A per phase, default maxCurrent or 63",
+                    "type": "number"
+                },
+                "exportPower": {
+                    "description": "W fed into the grid at most, default 3 x 230 V x current",
+                    "type": "number"
+                },
+                "importPower": {
+                    "description": "W drawn from the grid at most, default 3 x 230 V x current",
+                    "type": "number"
+                }
+            }
+        },
         "meters.MeterStatus": {
             "type": "object",
             "properties": {
@@ -176,9 +274,49 @@
                     "description": "Last valid snapshot from the source",
                     "type": "string"
                 },
+                "latencyMs": {
+                    "description": "Duration of the last successful read of the source",
+                    "type": "number"
+                },
+                "limits": {
+                    "description": "Scale of the web page",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meters.LimitsConfig"
+                        }
+                    ]
+                },
+                "maxCurrent": {
+                    "description": "A per phase, plausibility check",
+                    "type": "number"
+                },
+                "offlineSince": {
+                    "description": "When the unit IDs went silent after staleTimeout",
+                    "type": "string"
+                },
+                "online": {
+                    "description": "The unit IDs answer, see staleTimeout",
+                    "type": "boolean"
+                },
+                "pollIntervalSeconds": {
+                    "description": "Poll interval of the source",
+                    "type": "number"
+                },
+                "polls": {
+                    "description": "Successful polls since start",
+                    "type": "integer"
+                },
                 "ready": {
                     "description": "Values are current, see staleAfter",
                     "type": "boolean"
+                },
+                "source": {
+                    "description": "Upstream meter, e.g. \"tcp 192.168.1.10:502 unit 1\"",
+                    "type": "string"
+                },
+                "staleTimeoutSeconds": {
+                    "description": "0 = the unit IDs never go silent",
+                    "type": "number"
                 },
                 "unitIDs": {
                     "description": "Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)",
@@ -186,6 +324,92 @@
                     "items": {
                         "type": "integer"
                     }
+                },
+                "values": {
+                    "description": "Values are the canonical fields of the last valid snapshot, as served on the unit IDs.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                }
+            }
+        },
+        "meters.RTUActivity": {
+            "type": "object",
+            "properties": {
+                "line": {
+                    "description": "e.g. 9600 8N1",
+                    "type": "string"
+                },
+                "port": {
+                    "description": "e.g. /dev/ttyS0",
+                    "type": "string"
+                },
+                "requests": {
+                    "description": "answered since start",
+                    "type": "integer"
+                }
+            }
+        },
+        "meters.RegisterDump": {
+            "type": "object",
+            "properties": {
+                "online": {
+                    "description": "false: the unit ID does not answer, see staleTimeout",
+                    "type": "boolean"
+                },
+                "proprietary": {
+                    "description": "Fronius RS485 map, read by the inverter",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/meters.RegisterRow"
+                    }
+                },
+                "sunspec": {
+                    "description": "SunSpec models 1 and 203, read by wallboxes and evcc",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/meters.RegisterRow"
+                    }
+                },
+                "unitID": {
+                    "type": "integer"
+                }
+            }
+        },
+        "meters.RegisterRow": {
+            "type": "object",
+            "properties": {
+                "addr": {
+                    "type": "integer"
+                },
+                "field": {
+                    "description": "canonical field, empty for a fixed value",
+                    "type": "string"
+                },
+                "raw": {
+                    "description": "registers, high word first",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "sf": {
+                    "description": "value = raw * 10^sf",
+                    "type": "integer"
+                },
+                "text": {
+                    "description": "decoded string",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "uint16 | int16 | uint32 | int32 | float32 | string",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "decoded value, 0 for strings",
+                    "type": "number"
                 }
             }
         },
@@ -203,6 +427,23 @@
                 },
                 "since": {
                     "type": "string"
+                }
+            }
+        },
+        "meters.TCPActivity": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "description": "host:port",
+                    "type": "string"
+                },
+                "clients": {
+                    "description": "connected right now",
+                    "type": "integer"
+                },
+                "requests": {
+                    "description": "answered since start",
+                    "type": "integer"
                 }
             }
         },
