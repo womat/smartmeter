@@ -7,7 +7,7 @@ require (
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.6
 	github.com/womat/golib v1.3.1
-	github.com/womat/mbserver v0.0.7
+	github.com/womat/mbserver v0.1.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -36,5 +36,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
 )
-
-replace github.com/womat/mbserver => ../mbserver
