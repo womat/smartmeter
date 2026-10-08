@@ -168,7 +168,7 @@ devices:
     # poll — Leseintervall und Blockbildung
     # -------------------------------------------------------------------------
     poll:
-      interval: "5m"
+      interval: "1s"
       max_block_gap: 4      # Max. Lücke (Register) innerhalb eines Leseblocks
       max_block_size: 125   # Max. Registerzahl pro Leseblock (Modbus-Limit 125)
 

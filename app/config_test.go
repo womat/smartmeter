@@ -94,3 +94,52 @@ func TestValidateMaxCurrent(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want max_current error", err)
 	}
 }
+
+// TestRepoConfigs keeps the shipped configuration files loadable and valid.
+func TestRepoConfigs(t *testing.T) {
+	t.Setenv("SMARTMETEREMU_APIKEY", "test")
+
+	for _, name := range []string{"config.yaml", "primary-meter.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := LoadConfig(filepath.Join("..", "config", name))
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+			if err = cfg.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v", err)
+			}
+			if _, err = NewModbusService(cfg); err != nil {
+				t.Fatalf("NewModbusService() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestPrimaryMeterConfig(t *testing.T) {
+	t.Setenv("SMARTMETEREMU_APIKEY", "test")
+
+	cfg, err := LoadConfig(filepath.Join("..", "config", "primary-meter.yaml"))
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if err = cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	device := cfg.Devices[0]
+	if !slices.Equal(device.UnitIDs, []uint8{1, 200}) {
+		t.Errorf("UnitIDs = %v, want [1 200]", device.UnitIDs)
+	}
+	if !cfg.Listen.RTU.Enabled || cfg.Listen.RTU.Port != "/dev/ttyS0" {
+		t.Errorf("RTU listener = %+v, want enabled on /dev/ttyS0", cfg.Listen.RTU)
+	}
+
+	// The Smartfox block is read with a single request, like the old emulator.
+	compiled, err := compileDevice(device)
+	if err != nil {
+		t.Fatalf("compileDevice() error = %v", err)
+	}
+	if want := []readBlock{{Start: 40999, Quantity: 39}}; !slices.Equal(compiled.Blocks, want) {
+		t.Errorf("Blocks = %v, want %v", compiled.Blocks, want)
+	}
+}

@@ -1,0 +1,153 @@
+# =============================================================================
+# primary-meter — Ablöse des alten Emulators (emu.service, 1.0.23beta)
+# =============================================================================
+#
+# Smartfox (Modbus TCP) → emulierter Fronius Smart Meter 63A-3
+#   Unit 1   — Fronius-Wechselrichter über RS485 (/dev/ttyS0, 9600 8N1)
+#   Unit 200 — Wallbox / evcc über Modbus TCP (SunSpec)
+#
+# Beschreibung aller Optionen: config/config.yaml
+#
+# Paralleltest neben dem alten Emulator (der hält /dev/ttyS0 und Port 502):
+#   listen.rtu.enabled: false
+#   listen.tcp.host: "127.0.0.1", listen.tcp.port: 1502
+# =============================================================================
+
+logLevel: info
+logDestination: stdout
+env: prod
+
+webserver:
+  listenHost: 0.0.0.0
+  listenPort: 8443
+  apiKey: ${SMARTMETEREMU_APIKEY}
+  keyFile: /opt/smartmeteremu/etc/key.pem
+  certFile: /opt/smartmeteremu/etc/cert.pem
+  blockedIPs: []
+  allowedIPs: []
+
+listen:
+  rtu:
+    enabled: true
+    port: "/dev/ttyS0"
+    baud_rate: 9600
+    data_bits: 8
+    parity: "N"
+    stop_bits: 1
+  tcp:
+    enabled: true
+    host: "0.0.0.0"
+    port: 502
+
+devices:
+  - name: "primary_meter"
+    unitIds: [1, 200]
+    max_current: 63
+
+    source:
+      type: tcp
+      unitId: 1
+      timeout: "300ms"
+      tcp:
+        host: "192.0.2.10"   # Smartfox
+        port: 502
+
+    poll:
+      interval: "1s"
+      max_block_gap: 10         # ein Block 40999–41037 (39 Register), wie der alte Emulator
+      max_block_size: 125
+
+    # Smartfox-Registerliste (0-basiert):
+    # https://smartfox.at/wp-content/uploads/2022/12/Modbus-Register-SMARTFOX-Pro-SMARTFOX-Pro-2-v22e-00.01.03.10.xlsx
+    # Spannung L-L, Strom gesamt, Scheinleistung und PF gesamt werden im Emulator abgeleitet.
+    map:
+      # Identifikation, wie emu.yaml (18 = 285, 768 = 117, 4176 = 99999999)
+      device_id:
+        type: fixed
+        value: 285
+      firmware:
+        type: fixed
+        value: 117
+      serial_number:
+        type: fixed
+        value: 99999999
+
+      energy_import:              # Wh
+        type: register
+        address: 40999
+        dtype: uint64
+      energy_export:              # Wh
+        type: register
+        address: 41003
+        dtype: uint64
+
+      power_total:                # W
+        type: register
+        address: 41017
+        dtype: int32
+      power_l1:
+        type: register
+        address: 41019
+        dtype: int32
+      power_l2:
+        type: register
+        address: 41021
+        dtype: int32
+      power_l3:
+        type: register
+        address: 41023
+        dtype: int32
+
+      voltage_l1:                 # 0,1 V
+        type: register
+        address: 41025
+        dtype: uint16
+        scale: -1
+      voltage_l2:
+        type: register
+        address: 41026
+        dtype: uint16
+        scale: -1
+      voltage_l3:
+        type: register
+        address: 41027
+        dtype: uint16
+        scale: -1
+
+      current_l1:                 # mA
+        type: register
+        address: 41028
+        dtype: uint32
+        scale: -3
+      current_l2:
+        type: register
+        address: 41030
+        dtype: uint32
+        scale: -3
+      current_l3:
+        type: register
+        address: 41032
+        dtype: uint32
+        scale: -3
+
+      pf_l1:                      # × 0,0001
+        type: register
+        address: 41034
+        dtype: int16
+        scale: -4
+      pf_l2:
+        type: register
+        address: 41035
+        dtype: int16
+        scale: -4
+      pf_l3:
+        type: register
+        address: 41036
+        dtype: int16
+        scale: -4
+
+      frequency:                  # 0,01 Hz
+        type: register
+        address: 41037
+        dtype: uint16
+        scale: -2
