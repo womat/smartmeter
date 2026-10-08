@@ -84,7 +84,7 @@ func (app *App) Run() (*App, error) {
 	}
 
 	// here start your services
-	if len(app.config.Devices) > 0 {
+	if len(app.config.Meter) > 0 {
 		if err := app.modbusServer.Start(app.config.Listen); err != nil {
 			slog.Error("Error starting modbus server", "error", err.Error())
 			return app, err
@@ -93,7 +93,7 @@ func (app *App) Run() (*App, error) {
 			slog.Error("Error starting modbus polling service", "error", err.Error())
 			return app, err
 		}
-		slog.Info("Modbus client and server started", "devices", len(app.config.Devices))
+		slog.Info("Modbus client and server started", "meters", len(app.config.Meter))
 	}
 
 	// handle the OS signals
@@ -119,7 +119,7 @@ func (app *App) Run() (*App, error) {
 // - initializes API routes
 func (app *App) Init() (err error) {
 
-	if len(app.config.Devices) > 0 {
+	if len(app.config.Meter) > 0 {
 		app.modbusServer, err = NewModbusServerService(app.config)
 		if err != nil {
 			slog.Error("Failed to initialize Modbus server", "error", err)

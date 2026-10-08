@@ -22,11 +22,10 @@ import (
 
 // SetupRoutes configures all HTTP routes and global middleware for the application.
 func (app *App) SetupRoutes() {
+	// API key only: with JwtSecret and JwtID left empty, golib's JWT path stays disabled.
 	webCfg := web.Config{
-		ApiKey:    app.config.Webserver.ApiKey,
-		JwtSecret: app.config.Webserver.JwtSecret,
-		JwtID:     app.config.Webserver.JwtID,
-		AppName:   MODULE,
+		ApiKey:  app.config.Webserver.ApiKey,
+		AppName: MODULE,
 	}
 
 	mux := http.NewServeMux()

@@ -43,7 +43,7 @@ func TestBuildReadBlocks(t *testing.T) {
 }
 
 func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
-	device, err := compileDevice(DeviceConfig{
+	device, err := compileDevice(MeterConfig{
 		Name:    "main_meter",
 		UnitIDs: []uint8{200},
 		Source: SourceConfig{
@@ -64,10 +64,10 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 			"device_id":     {Type: "fixed", Value: 285},
 			"firmware":      {Type: "fixed", Value: 117},
 			"serial_number": {Type: "fixed", Value: 99999999},
-			"voltage_l1_n":  {Type: "register", Address: 52, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
-			"voltage_l2_n":  {Type: "register", Address: 54, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
-			"voltage_l3_n":  {Type: "register", Address: 56, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
-			"voltage_l1_l2": {Type: "expr", Expr: "${voltage_l1_n} * SQRT(3)"},
+			"voltage_l1":    {Type: "register", Address: 52, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
+			"voltage_l2":    {Type: "register", Address: 54, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
+			"voltage_l3":    {Type: "register", Address: 56, DType: "uint16", ByteOrder: "big", WordOrder: "big", Scale: -1},
+			"voltage_l1_l2": {Type: "expr", Expr: "{voltage_l1} * SQRT(3)"},
 			"current_l1":    {Type: "register", Address: 58, DType: "uint32", ByteOrder: "big", WordOrder: "big", Scale: -3},
 			"current_l2":    {Type: "register", Address: 62, DType: "uint32", ByteOrder: "big", WordOrder: "big", Scale: -3},
 			"current_l3":    {Type: "register", Address: 66, DType: "uint32", ByteOrder: "big", WordOrder: "big", Scale: -3},
@@ -151,7 +151,7 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 		return MappingConfig{Type: "register", Address: address, DType: dtype, ByteOrder: "big", WordOrder: "big", Scale: scale}
 	}
 
-	device, err := compileDevice(DeviceConfig{
+	device, err := compileDevice(MeterConfig{
 		Name:    "primary_meter",
 		UnitIDs: []uint8{1, 200},
 		Source:  SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
@@ -316,7 +316,7 @@ func TestCheckPlausibility(t *testing.T) {
 }
 
 func TestPollAndUpdateDiscardsSpike(t *testing.T) {
-	device, err := compileDevice(DeviceConfig{
+	device, err := compileDevice(MeterConfig{
 		Name:       "main_meter",
 		UnitIDs:    []uint8{1},
 		MaxCurrent: 63,

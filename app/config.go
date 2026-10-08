@@ -1,10 +1,14 @@
 package app
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,12 +22,12 @@ const (
 
 // Config holds the main application configuration.
 type Config struct {
-	Env            string          `yaml:"env"`            // Application environment: dev | prod
-	LogLevel       string          `yaml:"logLevel"`       // Log level: debug | info | warning | error
-	LogDestination string          `yaml:"logDestination"` // Log output: stdout | stderr | /path/to/logfile
-	Webserver      WebserverConfig `yaml:"webserver"`      // Webserver configuration
-	Listen         ListenConfig    `yaml:"listen"`         // Modbus listener configuration
-	Devices        []DeviceConfig  `yaml:"devices"`        // Emulated smart meter devices
+	Env            string                 `yaml:"env"`            // Application environment: dev | prod
+	LogLevel       string                 `yaml:"logLevel"`       // Log level: debug | info | warning | error
+	LogDestination string                 `yaml:"logDestination"` // Log output: stdout | stderr | /path/to/logfile
+	Webserver      WebserverConfig        `yaml:"webserver"`      // Webserver configuration
+	Listen         ListenConfig           `yaml:"listen"`         // Modbus server facing inverter and clients
+	Meter          map[string]MeterConfig `yaml:"meter"`          // Emulated meters, keyed by name
 }
 
 // WebserverConfig holds HTTPS server settings.
@@ -31,80 +35,85 @@ type WebserverConfig struct {
 	ListenHost string   `yaml:"listenHost"` // Host address for web server
 	ListenPort int      `yaml:"listenPort"` // Port for web server
 	ApiKey     string   `yaml:"apiKey"`     // API key for requests
-	JwtSecret  string   `yaml:"jwtSecret"`  // Secret for JWT tokens
-	JwtID      string   `yaml:"jwtID"`      // Unique JWT ID
 	KeyFile    string   `yaml:"keyFile"`    // SSL private key file
 	CertFile   string   `yaml:"certFile"`   // SSL certificate file
 	BlockedIPs []string `yaml:"blockedIPs"` // Forbidden IP addresses or networks
 	AllowedIPs []string `yaml:"allowedIPs"` // Allowed IP addresses or networks
 }
 
+// ListenConfig configures the Modbus server. TCP and RTU can be active at the same time
+// and serve the same unit IDs.
 type ListenConfig struct {
 	TCP ListenTCPConfig `yaml:"tcp"`
 	RTU ListenRTUConfig `yaml:"rtu"`
 }
 
+// ListenTCPConfig configures the Modbus TCP server.
 type ListenTCPConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Host    string `yaml:"host"`
-	Port    int    `yaml:"port"`
+	Enabled bool   `yaml:"enabled"` // Start the Modbus TCP server
+	Host    string `yaml:"host"`    // Listen address (0.0.0.0 = all interfaces)
+	Port    int    `yaml:"port"`    // Listen port
 }
 
+// ListenRTUConfig configures the Modbus RTU server on a serial port.
 type ListenRTUConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	Port     string `yaml:"port"`
-	BaudRate int    `yaml:"baud_rate"`
-	DataBits int    `yaml:"data_bits"`
-	Parity   string `yaml:"parity"`
-	StopBits int    `yaml:"stop_bits"`
+	Enabled      bool `yaml:"enabled"` // Start the Modbus RTU server
+	SerialConfig `yaml:",inline"`
 }
 
-type DeviceConfig struct {
-	Name       string                   `yaml:"name"`
-	UnitIDs    []uint8                  `yaml:"unitIds"`     // unit IDs the emulated meter answers on
-	MaxCurrent float64                  `yaml:"max_current"` // rated current per phase in A, 0 = no plausibility check
-	Source     SourceConfig             `yaml:"source"`
-	Poll       PollConfig               `yaml:"poll"`
-	Map        map[string]MappingConfig `yaml:"map"`
+// SerialConfig holds the settings of a serial port.
+type SerialConfig struct {
+	Port     string `yaml:"port"`     // Device, e.g. /dev/ttyS0
+	BaudRate int    `yaml:"baudRate"` // Baud rate, e.g. 9600
+	DataBits int    `yaml:"dataBits"` // Data bits: 5-8
+	Parity   string `yaml:"parity"`   // Parity: N | E | O
+	StopBits int    `yaml:"stopBits"` // Stop bits: 1 | 2
 }
 
+// MeterConfig describes one emulated meter: where its values come from and on which
+// unit IDs it answers.
+type MeterConfig struct {
+	Name       string                   `yaml:"-"`          // Key in Config.Meter, set by Validate
+	UnitIDs    []uint8                  `yaml:"unitIDs"`    // Unit IDs the emulated meter answers on
+	MaxCurrent float64                  `yaml:"maxCurrent"` // Rated current per phase in A, 0 = no plausibility check
+	Source     SourceConfig             `yaml:"source"`     // Upstream meter
+	Poll       PollConfig               `yaml:"poll"`       // Polling of the upstream meter
+	Map        map[string]MappingConfig `yaml:"map"`        // Canonical field name -> mapping
+}
+
+// SourceConfig describes the connection to the upstream meter.
 type SourceConfig struct {
-	Type    string          `yaml:"type"`
-	UnitID  uint8           `yaml:"unitId"`
-	Timeout time.Duration   `yaml:"timeout"`
-	TCP     TCPSourceConfig `yaml:"tcp"`
-	RTU     RTUSourceConfig `yaml:"rtu"`
+	Type    string          `yaml:"type"`    // tcp | rtu
+	UnitID  uint8           `yaml:"unitID"`  // Unit ID of the upstream meter
+	Timeout time.Duration   `yaml:"timeout"` // Request timeout as Go duration string (e.g. 300ms)
+	TCP     TCPSourceConfig `yaml:"tcp"`     // Used with type tcp
+	RTU     SerialConfig    `yaml:"rtu"`     // Used with type rtu
 }
 
+// TCPSourceConfig holds the address of a Modbus TCP upstream meter.
 type TCPSourceConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host string `yaml:"host"` // Host name or IP address
+	Port int    `yaml:"port"` // Port
 }
 
-type RTUSourceConfig struct {
-	Port     string `yaml:"port"`
-	BaudRate int    `yaml:"baud_rate"`
-	DataBits int    `yaml:"data_bits"`
-	Parity   string `yaml:"parity"`
-	StopBits int    `yaml:"stop_bits"`
-}
-
+// PollConfig controls how the upstream meter is read.
 type PollConfig struct {
-	Interval     time.Duration `yaml:"interval"`
-	MaxBlockGap  int           `yaml:"max_block_gap"`
-	MaxBlockSize int           `yaml:"max_block_size"`
+	Interval     time.Duration `yaml:"interval"`     // Poll interval as Go duration string (e.g. 1s)
+	MaxBlockGap  int           `yaml:"maxBlockGap"`  // Unused registers read along to merge two fields into one request
+	MaxBlockSize int           `yaml:"maxBlockSize"` // Registers per request, at most 125
 }
 
+// MappingConfig maps one canonical field to its source.
 type MappingConfig struct {
-	Type      string  `yaml:"type"`
-	Address   uint16  `yaml:"address"`
-	DType     string  `yaml:"dtype"`
-	ByteOrder string  `yaml:"byte_order"`
-	WordOrder string  `yaml:"word_order"`
-	Scale     int     `yaml:"scale"`
-	Offset    float64 `yaml:"offset"`
-	Value     any     `yaml:"value"`
-	Expr      string  `yaml:"expr"`
+	Type      string  `yaml:"type"`      // register | fixed | expr
+	Address   uint16  `yaml:"address"`   // register: 0-based start address
+	DType     string  `yaml:"dtype"`     // register: uint16 | uint32 | uint64 | int16 | int32 | int64 | float32
+	ByteOrder string  `yaml:"byteOrder"` // register: big | little
+	WordOrder string  `yaml:"wordOrder"` // register: big | little (32/64 bit only)
+	Scale     int     `yaml:"scale"`     // register: value = (raw + offset) * 10^scale
+	Offset    float64 `yaml:"offset"`    // register: added to the raw value before scaling
+	Value     any     `yaml:"value"`     // fixed: the value
+	Expr      string  `yaml:"expr"`      // expr: e.g. "{power_l1} + {power_l2}"
 }
 
 // NewConfig returns a Config with sane defaults
@@ -125,17 +134,34 @@ func NewConfig() *Config {
 				Port: 502,
 			},
 			RTU: ListenRTUConfig{
-				BaudRate: 9600,
-				DataBits: 8,
-				Parity:   "N",
-				StopBits: 1,
+				SerialConfig: SerialConfig{
+					BaudRate: 9600,
+					DataBits: 8,
+					Parity:   "N",
+					StopBits: 1,
+				},
 			},
 		},
-		Devices: []DeviceConfig{},
+		Meter: make(map[string]MeterConfig),
 	}
 }
 
-// LoadConfig loads configuration from a YAML file and expands environment variables.
+// envBraces matches ${VAR} references; see expandEnvBraces.
+var envBraces = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// expandEnvBraces replaces ${VAR} with the value of the environment variable VAR, or with an
+// empty string when it is unset. Unlike os.ExpandEnv it leaves every other "$" alone, so an API
+// key or password containing "$" is not silently cut short.
+func expandEnvBraces(s string) string {
+	return envBraces.ReplaceAllStringFunc(s, func(ref string) string {
+		return os.Getenv(envBraces.FindStringSubmatch(ref)[1])
+	})
+}
+
+// LoadConfig loads configuration from a YAML file and expands ${VAR} environment references.
+//
+// Unknown keys are an error rather than ignored, so a misspelled or renamed key cannot silently
+// leave its setting at the default.
 func LoadConfig(fileName string) (*Config, error) {
 	cfg := NewConfig()
 
@@ -152,23 +178,16 @@ func LoadConfig(fileName string) (*Config, error) {
 		return cfg, err
 	}
 
-	// Replace environment variables in the YAML
-	replaced := os.ExpandEnv(string(content))
-
-	// Unmarshal YAML into the config struct
-	if err = yaml.Unmarshal([]byte(replaced), cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader([]byte(expandEnvBraces(string(content)))))
+	dec.KnownFields(true)
+	if err = dec.Decode(cfg); err != nil && !errors.Is(err, io.EOF) {
 		return cfg, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	return cfg, nil
 }
 
-// IsDevEnv returns true if the environment is development.
-func (c *Config) IsDevEnv() bool {
-	return c.Env == DevEnv
-}
-
-// Validate checks the Config for invalid or missing values.
+// Validate checks the Config for invalid or missing values and applies the per-meter defaults.
 func (c *Config) Validate() error {
 
 	if c.Env != ProdEnv && c.Env != DevEnv {
@@ -188,167 +207,213 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid port: %d", c.Webserver.ListenPort)
 	}
 
-	for i := range c.Devices {
-		c.applyDeviceDefaults(&c.Devices[i])
-		if err := c.validateDevice(c.Devices[i]); err != nil {
-			return err
+	if c.Listen.TCP.Enabled && (c.Listen.TCP.Port < 1 || c.Listen.TCP.Port > 65535) {
+		return fmt.Errorf("invalid listen.tcp.port: %d", c.Listen.TCP.Port)
+	}
+	if c.Listen.RTU.Enabled {
+		if err := c.Listen.RTU.SerialConfig.validate(); err != nil {
+			return fmt.Errorf("invalid listen.rtu: %w", err)
 		}
 	}
 
-	return checkUniqueUnitIDs(c.Devices)
+	for _, name := range c.MeterNames() {
+		meter := c.Meter[name]
+		meter.Name = name
+		meter.applyDefaults()
+		if err := meter.validate(); err != nil {
+			return fmt.Errorf("invalid config for meter %q: %w", name, err)
+		}
+		c.Meter[name] = meter
+	}
+
+	return checkUniqueUnitIDs(c)
 }
 
-// checkUniqueUnitIDs ensures that every unit ID is served by exactly one device.
-func checkUniqueUnitIDs(devices []DeviceConfig) error {
+// MeterNames returns the meter names in a fixed order, so validation errors and start-up
+// do not depend on map order.
+func (c *Config) MeterNames() []string {
+	names := make([]string, 0, len(c.Meter))
+	for name := range c.Meter {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// checkUniqueUnitIDs ensures that every unit ID is served by exactly one meter.
+func checkUniqueUnitIDs(c *Config) error {
 	owner := make(map[uint8]string)
-	for _, device := range devices {
-		for _, id := range device.UnitIDs {
-			if name, exists := owner[id]; exists {
-				return fmt.Errorf("unitId %d is used by device %q and device %q", id, name, device.Name)
+	for _, name := range c.MeterNames() {
+		for _, id := range c.Meter[name].UnitIDs {
+			if other, exists := owner[id]; exists {
+				return fmt.Errorf("unitID %d is used by meter %q and meter %q", id, other, name)
 			}
-			owner[id] = device.Name
+			owner[id] = name
 		}
 	}
 	return nil
 }
 
-func (c *Config) applyDeviceDefaults(device *DeviceConfig) {
-	if device.Source.Timeout == 0 {
-		device.Source.Timeout = 2 * time.Second
-	}
-	if device.Poll.Interval == 0 {
-		device.Poll.Interval = time.Second
-	}
-	if device.Poll.MaxBlockGap == 0 {
-		device.Poll.MaxBlockGap = 4
-	}
-	if device.Poll.MaxBlockSize == 0 {
-		device.Poll.MaxBlockSize = 125
+// minApiKeyLength is the length below which Warnings flags the API key as weak.
+const minApiKeyLength = 16
+
+// Warnings returns findings that do not stop the service but should be fixed. It never includes
+// secret values.
+func (c *Config) Warnings() []string {
+	var warnings []string
+
+	key := c.Webserver.ApiKey
+	switch {
+	case strings.Contains(strings.ToLower(key), "changeme"):
+		warnings = append(warnings, "apiKey is still the example value from the documentation; set a random key")
+	case len(key) < minApiKeyLength:
+		warnings = append(warnings, fmt.Sprintf("apiKey is shorter than %d characters; use a longer random key", minApiKeyLength))
 	}
 
-	switch strings.ToLower(device.Source.Type) {
+	return warnings
+}
+
+func (m *MeterConfig) applyDefaults() {
+	if m.Source.Timeout == 0 {
+		m.Source.Timeout = 2 * time.Second
+	}
+	if m.Poll.Interval == 0 {
+		m.Poll.Interval = time.Second
+	}
+	if m.Poll.MaxBlockGap == 0 {
+		m.Poll.MaxBlockGap = 4
+	}
+	if m.Poll.MaxBlockSize == 0 {
+		m.Poll.MaxBlockSize = 125
+	}
+
+	switch strings.ToLower(m.Source.Type) {
 	case "tcp":
-		if device.Source.TCP.Port == 0 {
-			device.Source.TCP.Port = 502
+		if m.Source.TCP.Port == 0 {
+			m.Source.TCP.Port = 502
 		}
 	case "rtu":
-		if device.Source.RTU.BaudRate == 0 {
-			device.Source.RTU.BaudRate = 9600
+		if m.Source.RTU.BaudRate == 0 {
+			m.Source.RTU.BaudRate = 9600
 		}
-		if device.Source.RTU.DataBits == 0 {
-			device.Source.RTU.DataBits = 8
+		if m.Source.RTU.DataBits == 0 {
+			m.Source.RTU.DataBits = 8
 		}
-		if device.Source.RTU.Parity == "" {
-			device.Source.RTU.Parity = "N"
+		if m.Source.RTU.Parity == "" {
+			m.Source.RTU.Parity = "N"
 		}
-		if device.Source.RTU.StopBits == 0 {
-			device.Source.RTU.StopBits = 1
+		if m.Source.RTU.StopBits == 0 {
+			m.Source.RTU.StopBits = 1
 		}
 	}
 
-	for field, mapping := range device.Map {
+	for field, mapping := range m.Map {
 		if mapping.ByteOrder == "" {
 			mapping.ByteOrder = "big"
 		}
 		if mapping.WordOrder == "" {
 			mapping.WordOrder = "big"
 		}
-		device.Map[field] = mapping
+		m.Map[field] = mapping
 	}
 }
 
-func (c *Config) validateDevice(device DeviceConfig) error {
-	if device.Name == "" {
-		return errors.New("device name is required")
+func (m MeterConfig) validate() error {
+	if len(m.UnitIDs) == 0 {
+		return errors.New("unitIDs requires at least one entry")
 	}
-	if len(device.UnitIDs) == 0 {
-		return fmt.Errorf("device %q requires at least one entry in unitIds", device.Name)
-	}
-	for _, id := range device.UnitIDs {
+	for _, id := range m.UnitIDs {
 		if id == 0 || id > 247 {
-			return fmt.Errorf("device %q has invalid unitId %d", device.Name, id)
+			return fmt.Errorf("invalid unitID %d, must be 1-247", id)
 		}
 	}
-	if device.MaxCurrent < 0 {
-		return fmt.Errorf("device %q has invalid max_current %g", device.Name, device.MaxCurrent)
+	if m.MaxCurrent < 0 {
+		return fmt.Errorf("invalid maxCurrent %g", m.MaxCurrent)
 	}
-	if device.Source.UnitID == 0 || device.Source.UnitID > 247 {
-		return fmt.Errorf("device %q has invalid source unitId %d", device.Name, device.Source.UnitID)
+	if m.Source.UnitID == 0 || m.Source.UnitID > 247 {
+		return fmt.Errorf("invalid source.unitID %d, must be 1-247", m.Source.UnitID)
 	}
-	if device.Source.Timeout <= 0 {
-		return fmt.Errorf("device %q has invalid source timeout %s", device.Name, device.Source.Timeout)
+	if m.Source.Timeout <= 0 {
+		return fmt.Errorf("invalid source.timeout %s", m.Source.Timeout)
 	}
-	if device.Poll.Interval <= 0 {
-		return fmt.Errorf("device %q has invalid poll interval %s", device.Name, device.Poll.Interval)
+	if m.Poll.Interval <= 0 {
+		return fmt.Errorf("invalid poll.interval %s", m.Poll.Interval)
 	}
-	if device.Poll.MaxBlockGap < 0 {
-		return fmt.Errorf("device %q has invalid max_block_gap %d", device.Name, device.Poll.MaxBlockGap)
+	if m.Poll.MaxBlockGap < 0 {
+		return fmt.Errorf("invalid poll.maxBlockGap %d", m.Poll.MaxBlockGap)
 	}
-	if device.Poll.MaxBlockSize < 1 || device.Poll.MaxBlockSize > 125 {
-		return fmt.Errorf("device %q has invalid max_block_size %d", device.Name, device.Poll.MaxBlockSize)
+	if m.Poll.MaxBlockSize < 1 || m.Poll.MaxBlockSize > 125 {
+		return fmt.Errorf("invalid poll.maxBlockSize %d, must be 1-125", m.Poll.MaxBlockSize)
 	}
-	if len(device.Map) == 0 {
-		return fmt.Errorf("device %q requires at least one map entry", device.Name)
+	if len(m.Map) == 0 {
+		return errors.New("map requires at least one entry")
 	}
 
-	switch strings.ToLower(device.Source.Type) {
+	switch strings.ToLower(m.Source.Type) {
 	case "tcp":
-		if device.Source.TCP.Host == "" {
-			return fmt.Errorf("device %q source tcp.host is required", device.Name)
+		if m.Source.TCP.Host == "" {
+			return errors.New("source.tcp.host is required")
 		}
-		if device.Source.TCP.Port < 1 || device.Source.TCP.Port > 65535 {
-			return fmt.Errorf("device %q source tcp.port is invalid", device.Name)
+		if m.Source.TCP.Port < 1 || m.Source.TCP.Port > 65535 {
+			return fmt.Errorf("invalid source.tcp.port %d", m.Source.TCP.Port)
 		}
 	case "rtu":
-		if device.Source.RTU.Port == "" {
-			return fmt.Errorf("device %q source rtu.port is required", device.Name)
-		}
-		if device.Source.RTU.BaudRate <= 0 {
-			return fmt.Errorf("device %q source rtu.baud_rate is invalid", device.Name)
-		}
-		if device.Source.RTU.DataBits < 5 || device.Source.RTU.DataBits > 8 {
-			return fmt.Errorf("device %q source rtu.data_bits is invalid", device.Name)
-		}
-		if !slices.Contains([]string{"N", "E", "O"}, strings.ToUpper(device.Source.RTU.Parity)) {
-			return fmt.Errorf("device %q source rtu.parity must be N, E or O", device.Name)
-		}
-		if device.Source.RTU.StopBits != 1 && device.Source.RTU.StopBits != 2 {
-			return fmt.Errorf("device %q source rtu.stop_bits is invalid", device.Name)
+		if err := m.Source.RTU.validate(); err != nil {
+			return fmt.Errorf("invalid source.rtu: %w", err)
 		}
 	default:
-		return fmt.Errorf("device %q source type %q is invalid", device.Name, device.Source.Type)
+		return fmt.Errorf("invalid source.type %q, must be tcp or rtu", m.Source.Type)
 	}
 
 	validMappingTypes := []string{"register", "fixed", "expr"}
 	validDTypes := []string{"uint16", "uint32", "uint64", "int16", "int32", "int64", "float32"}
 	validByteOrders := []string{"big", "little"}
 
-	for field, mapping := range device.Map {
+	for field, mapping := range m.Map {
 		if !slices.Contains(validMappingTypes, strings.ToLower(mapping.Type)) {
-			return fmt.Errorf("device %q field %q has invalid type %q", device.Name, field, mapping.Type)
+			return fmt.Errorf("field %q has invalid type %q", field, mapping.Type)
 		}
 
 		switch strings.ToLower(mapping.Type) {
 		case "register":
 			if !slices.Contains(validDTypes, strings.ToLower(mapping.DType)) {
-				return fmt.Errorf("device %q field %q has invalid dtype %q", device.Name, field, mapping.DType)
+				return fmt.Errorf("field %q has invalid dtype %q", field, mapping.DType)
 			}
 			if !slices.Contains(validByteOrders, strings.ToLower(mapping.ByteOrder)) {
-				return fmt.Errorf("device %q field %q has invalid byte_order %q", device.Name, field, mapping.ByteOrder)
+				return fmt.Errorf("field %q has invalid byteOrder %q", field, mapping.ByteOrder)
 			}
 			if !slices.Contains(validByteOrders, strings.ToLower(mapping.WordOrder)) {
-				return fmt.Errorf("device %q field %q has invalid word_order %q", device.Name, field, mapping.WordOrder)
+				return fmt.Errorf("field %q has invalid wordOrder %q", field, mapping.WordOrder)
 			}
 		case "fixed":
 			if mapping.Value == nil {
-				return fmt.Errorf("device %q field %q requires value for fixed mapping", device.Name, field)
+				return fmt.Errorf("field %q requires value for fixed mapping", field)
 			}
 		case "expr":
 			if strings.TrimSpace(mapping.Expr) == "" {
-				return fmt.Errorf("device %q field %q requires expr for expression mapping", device.Name, field)
+				return fmt.Errorf("field %q requires expr for expression mapping", field)
 			}
 		}
 	}
 
+	return nil
+}
+
+func (s SerialConfig) validate() error {
+	if s.Port == "" {
+		return errors.New("port is required")
+	}
+	if s.BaudRate <= 0 {
+		return fmt.Errorf("invalid baudRate %d", s.BaudRate)
+	}
+	if s.DataBits < 5 || s.DataBits > 8 {
+		return fmt.Errorf("invalid dataBits %d, must be 5-8", s.DataBits)
+	}
+	if !slices.Contains([]string{"N", "E", "O"}, strings.ToUpper(s.Parity)) {
+		return fmt.Errorf("invalid parity %q, must be N, E or O", s.Parity)
+	}
+	if s.StopBits != 1 && s.StopBits != 2 {
+		return fmt.Errorf("invalid stopBits %d, must be 1 or 2", s.StopBits)
+	}
 	return nil
 }

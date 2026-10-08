@@ -46,7 +46,7 @@ type compiledMapping struct {
 }
 
 type compiledDevice struct {
-	Config           DeviceConfig
+	Config           MeterConfig
 	RegisterMappings []compiledMapping
 	FixedMappings    []compiledMapping
 	ExprMappings     []compiledMapping
@@ -66,19 +66,21 @@ type ModbusService struct {
 }
 
 func NewModbusService(config *Config) (*ModbusService, error) {
-	if len(config.Devices) == 0 {
+	if len(config.Meter) == 0 {
 		return nil, nil
 	}
 
-	if err := checkUniqueUnitIDs(config.Devices); err != nil {
+	if err := checkUniqueUnitIDs(config); err != nil {
 		return nil, err
 	}
 
 	service := &ModbusService{}
-	for i := range config.Devices {
-		device, err := compileDevice(config.Devices[i])
+	for _, name := range config.MeterNames() {
+		meter := config.Meter[name]
+		meter.Name = name
+		device, err := compileDevice(meter)
 		if err != nil {
-			return nil, fmt.Errorf("device %q: %w", config.Devices[i].Name, err)
+			return nil, fmt.Errorf("meter %q: %w", name, err)
 		}
 		service.devices = append(service.devices, device)
 	}
@@ -143,7 +145,7 @@ func (s *ModbusService) closeReaders(readers []registerReader) error {
 	return errs
 }
 
-func compileDevice(cfg DeviceConfig) (*compiledDevice, error) {
+func compileDevice(cfg MeterConfig) (*compiledDevice, error) {
 	compiled := &compiledDevice{Config: cfg}
 
 	fieldsSeen := make(map[fronius.CanonicalField]struct{}, len(cfg.Map))
@@ -226,7 +228,7 @@ func buildReadBlocks(mappings []compiledMapping, maxGap, maxSize int) []readBloc
 
 func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 	if err := d.pollAndUpdate(writer); err != nil {
-		slog.Error("Initial Modbus poll failed", "device", d.Config.Name, "error", err)
+		slog.Error("Initial Modbus poll failed", "meter", d.Config.Name, "error", err)
 	}
 
 	ticker := time.NewTicker(d.Config.Poll.Interval)
@@ -238,7 +240,7 @@ func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 			return
 		case <-ticker.C:
 			if err := d.pollAndUpdate(writer); err != nil {
-				slog.Error("Modbus poll failed", "device", d.Config.Name, "error", err)
+				slog.Error("Modbus poll failed", "meter", d.Config.Name, "error", err)
 			}
 		}
 	}
@@ -252,7 +254,7 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 
 	// Discard spikes from the source; the last valid values stay in place.
 	if err = checkPlausibility(snapshot, d.Config.MaxCurrent); err != nil {
-		slog.Warn("Implausible Modbus snapshot discarded", "device", d.Config.Name, "error", err)
+		slog.Warn("Implausible Modbus snapshot discarded", "meter", d.Config.Name, "error", err)
 		return nil
 	}
 
@@ -266,7 +268,7 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 	}
 
 	d.LastSuccess = time.Now()
-	slog.Debug("Modbus snapshot updated", "device", d.Config.Name, "unitIds", d.Config.UnitIDs)
+	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIDs", d.Config.UnitIDs)
 	return nil
 }
 
@@ -496,14 +498,6 @@ func snapshotValues(snapshot fronius.Snapshot) map[string]float64 {
 		values[string(field)] = snapshot.Float64(field)
 	}
 
-	values["serial_string"] = values[string(fronius.FieldSerialNumber)]
-	values["voltage_l1_n"] = values[string(fronius.FieldVoltageL1)]
-	values["voltage_l2_n"] = values[string(fronius.FieldVoltageL2)]
-	values["voltage_l3_n"] = values[string(fronius.FieldVoltageL3)]
-	values["powerfactor_l1"] = values[string(fronius.FieldPFL1)]
-	values["powerfactor_l2"] = values[string(fronius.FieldPFL2)]
-	values["powerfactor_l3"] = values[string(fronius.FieldPFL3)]
-	values["voltage_l1_l3"] = values[string(fronius.FieldVoltageL3L1)]
 	return values
 }
 
@@ -583,43 +577,21 @@ func registerCount(dtype string) (uint16, error) {
 	}
 }
 
-func normalizeCanonicalField(name string) (fronius.CanonicalField, error) {
-	aliases := map[string]fronius.CanonicalField{
-		"device_id":      fronius.FieldDeviceID,
-		"firmware":       fronius.FieldFirmware,
-		"serial_number":  fronius.FieldSerialNumber,
-		"serial_string":  fronius.FieldSerialStr,
-		"serial_str":     fronius.FieldSerialStr,
-		"power_total":    fronius.FieldPowerTotal,
-		"power_l1":       fronius.FieldPowerL1,
-		"power_l2":       fronius.FieldPowerL2,
-		"power_l3":       fronius.FieldPowerL3,
-		"voltage_l1":     fronius.FieldVoltageL1,
-		"voltage_l2":     fronius.FieldVoltageL2,
-		"voltage_l3":     fronius.FieldVoltageL3,
-		"voltage_l1_n":   fronius.FieldVoltageL1,
-		"voltage_l2_n":   fronius.FieldVoltageL2,
-		"voltage_l3_n":   fronius.FieldVoltageL3,
-		"current_l1":     fronius.FieldCurrentL1,
-		"current_l2":     fronius.FieldCurrentL2,
-		"current_l3":     fronius.FieldCurrentL3,
-		"energy_import":  fronius.FieldEnergyImport,
-		"energy_export":  fronius.FieldEnergyExport,
-		"frequency":      fronius.FieldFrequency,
-		"pf_l1":          fronius.FieldPFL1,
-		"pf_l2":          fronius.FieldPFL2,
-		"pf_l3":          fronius.FieldPFL3,
-		"powerfactor_l1": fronius.FieldPFL1,
-		"powerfactor_l2": fronius.FieldPFL2,
-		"powerfactor_l3": fronius.FieldPFL3,
-		"voltage_l1_l2":  fronius.FieldVoltageL1L2,
-		"voltage_l2_l3":  fronius.FieldVoltageL2L3,
-		"voltage_l3_l1":  fronius.FieldVoltageL3L1,
-		"voltage_l1_l3":  fronius.FieldVoltageL3L1,
-	}
+// configurableFields are the canonical fields a meter's map may define; every other
+// field is derived from them.
+var configurableFields = []fronius.CanonicalField{
+	fronius.FieldDeviceID, fronius.FieldFirmware, fronius.FieldSerialNumber, fronius.FieldSerialStr,
+	fronius.FieldPowerTotal, fronius.FieldPowerL1, fronius.FieldPowerL2, fronius.FieldPowerL3,
+	fronius.FieldVoltageL1, fronius.FieldVoltageL2, fronius.FieldVoltageL3,
+	fronius.FieldVoltageL1L2, fronius.FieldVoltageL2L3, fronius.FieldVoltageL3L1,
+	fronius.FieldCurrentL1, fronius.FieldCurrentL2, fronius.FieldCurrentL3,
+	fronius.FieldEnergyImport, fronius.FieldEnergyExport, fronius.FieldFrequency,
+	fronius.FieldPFL1, fronius.FieldPFL2, fronius.FieldPFL3,
+}
 
-	field, ok := aliases[strings.ToLower(name)]
-	if !ok {
+func normalizeCanonicalField(name string) (fronius.CanonicalField, error) {
+	field := fronius.CanonicalField(name)
+	if !slices.Contains(configurableFields, field) {
 		return "", fmt.Errorf("unsupported canonical field %q", name)
 	}
 	return field, nil

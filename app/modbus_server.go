@@ -19,17 +19,17 @@ type ModbusServerService struct {
 }
 
 func NewModbusServerService(config *Config) (*ModbusServerService, error) {
-	if len(config.Devices) == 0 {
+	if len(config.Meter) == 0 {
 		return nil, nil
 	}
 
-	if err := checkUniqueUnitIDs(config.Devices); err != nil {
+	if err := checkUniqueUnitIDs(config); err != nil {
 		return nil, err
 	}
 
 	service := &ModbusServerService{server: mbserver.NewServer()}
-	for _, device := range config.Devices {
-		for _, id := range device.UnitIDs {
+	for _, name := range config.MeterNames() {
+		for _, id := range config.Meter[name].UnitIDs {
 			// unit ID 1 is created by mbserver.NewServer
 			if id == 1 {
 				continue

@@ -1,6 +1,13 @@
 # =============================================================================
-# app configuration
+# smartmeter configuration
 # =============================================================================
+#
+# smartmeter reads an upstream meter (Modbus TCP or RTU) and serves its values
+# as a Fronius Smart Meter 63A-3:
+#   - the proprietary RS485 map (4096 ff.) polled by Fronius inverters, and
+#   - the SunSpec block (40000 ff., model 203) read by wallboxes, evcc, etc.
+# The Fronius target registers are fixed in the code; this file only says where
+# the values come from and on which unit IDs the emulated meter answers.
 
 # logLevel defines the minimum log level.
 # Messages with at least this level are logged.
@@ -12,6 +19,8 @@ logLevel: info
 logDestination: stdout
 
 # environment: dev | prod
+# With prod, a missing webserver.certFile is an error; dev falls back to the embedded,
+# publicly known development certificate.
 env: dev
 
 
@@ -26,6 +35,7 @@ webserver:
   listenPort: 8443
 
   # Global API key for protected endpoints
+  # Can be taken from the environment, e.g. apiKey: ${SMARTMETER_API_KEY}
   apiKey: changeme!
 
   # TLS private key file
@@ -36,146 +46,99 @@ webserver:
 
   # Blocked IP addresses or networks (empty = none blocked)
   # Examples: 192.168.0.1, 192.168.0.0/16, 10.0.0.0/8
-  blockedIPs: []
+  blockedIPs: [ ]
   #  - 192.168.0.1
   #  - 192.168.0.0/16
 
   # Allowed IP addresses or networks (empty = all allowed)
   # Note: ::1 is the IPv6 loopback address
   # Examples: 127.0.0.1, ::1, 192.168.0.0/16
-  allowedIPs: []
+  allowedIPs: [ ]
   #  - 127.0.0.1
   #  - ::1
   #  - 192.168.0.0/16
 
 # =============================================================================
-# Fronius Smart Meter Emulator — Konfiguration
+# Modbus server (facing the inverter and other clients)
 # =============================================================================
-#
-# Diese Datei beschreibt ausschließlich:
-#   1. Wie der Emulator nach außen antwortet (listen)
-#   2. Woher die Messwerte kommen (source pro device)
-#   3. Wie Quellregister auf kanonische Felder gemappt werden (map)
-#
-# Was NICHT hier konfiguriert wird:
-#   - Fronius-Zielregister        → hardcoded im Code
-#   - Identifikationsregister     → hardcoded im Code
-#
-# =============================================================================
-# Kanonische Felder
-# =============================================================================
-#
-#   PFLICHT — müssen pro Device gemappt sein:
-#     power_total       Wirkleistung gesamt         [W]    signed float
-#     power_l1          Wirkleistung Phase 1         [W]    signed float
-#     power_l2          Wirkleistung Phase 2         [W]    signed float
-#     power_l3          Wirkleistung Phase 3         [W]    signed float
-#     voltage_l1        Spannung Phase 1–N           [V]
-#     voltage_l2        Spannung Phase 2–N           [V]
-#     voltage_l3        Spannung Phase 3–N           [V]
-#     current_l1        Strom Phase 1                [A]    signed float
-#     current_l2        Strom Phase 2                [A]    signed float
-#     current_l3        Strom Phase 3                [A]    signed float
-#     energy_import     Bezugsenergie gesamt         [Wh]
-#     energy_export     Einspeiseenergie gesamt      [Wh]
-#     frequency         Netzfrequenz                 [Hz]
-#
-#   OPTIONAL — Defaultwert 1.0 wenn nicht angegeben:
-#     pf_l1             Leistungsfaktor Phase 1      [-1.0 .. 1.0]
-#     pf_l2             Leistungsfaktor Phase 2      [-1.0 .. 1.0]
-#     pf_l3             Leistungsfaktor Phase 3      [-1.0 .. 1.0]
-#
-# =============================================================================
-# Mapping-Typen (type:)
-# =============================================================================
-#
-#   register  Wert wird aus Quellregister gelesen
-#   fixed     Fixer Wert, kein Quellzähler nötig
-#   expr      Berechnung aus anderen kanonischen Feldern
-#             Syntax: "{field1} + {field2} * 0.5"
-#             (nicht "${field}" — das wird beim Laden als Umgebungsvariable expandiert)
-#             Operatoren: + - * /  und Klammerung, Funktionen SQRT() ABS()
-#             Hinweis: referenzierte Felder müssen im selben Device definiert sein
-#
-# Für type: register
-#   address     Startadresse im Quellzähler (0-basiert)
-#   dtype       uint16 | uint32 | uint64 | int16 | int32 | int64 | float32
-#   byte_order  big | little                              (default: big)
-#   word_order  big | little  (nur bei 32/64 bit)         (default: big)
-#   scale       Exponent: Realwert = (Rohwert + offset) * 10^scale  (default: 0)
-#   offset      Additiver Offset auf Rohwert vor Skalierung          (default: 0)
-#
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# listen — Modbus-Server nach außen
-# RTU und TCP können gleichzeitig aktiv sein.
-# -----------------------------------------------------------------------------
+# TCP and RTU can be active at the same time; both serve every unit ID of every meter.
 listen:
   tcp:
     enabled: true
-    host: "0.0.0.0"
+    host: 0.0.0.0
     port: 502
+
+  # RS485 to the Fronius inverter (the inverter polls unit ID 1 at 9600 8N1)
   rtu:
-    enabled: false
-    port: "/dev/ttyUSB0"
-    baud_rate: 9600
-    data_bits: 8
-    parity: "N"             # N=none  E=even  O=odd
-    stop_bits: 1
+    enabled: true
+    port: /dev/ttyS0
+    baudRate: 9600
+    dataBits: 8
+    parity: N              # N | E | O
+    stopBits: 1
 
-# -----------------------------------------------------------------------------
-# devices — Liste der emulierten Smart Meter
-# Jeder Eintrag ist ein emulierter Zähler mit eigener Quelle und eigenen Unit-IDs.
-# -----------------------------------------------------------------------------
-devices:
-  # ---------------------------------------------------------------------------
-  # Device 1: Hauptzähler — Quellzähler via Modbus RTU
-  # ---------------------------------------------------------------------------
-  - name: "main_meter"
-    # Unit-IDs, unter denen dieses Gerät antwortet (1–247, über alle
-    # Geräte eindeutig). Alle IDs liefern dieselben Werte, erreichbar über
-    # RTU und TCP. Üblich: 1 = Wechselrichter (RS485), 200 = Fronius über TCP.
-    unitIds: [200]
+# =============================================================================
+# Emulated meters, keyed by name
+# =============================================================================
+# unitIDs      - Unit IDs the meter answers on (1-247, unique across all meters).
+#                All IDs serve the same values. Fronius convention:
+#                1 = inverter via RS485, 200 = SunSpec meter via TCP.
+# maxCurrent   - Rated current per phase in A (Fronius Smart Meter 63A-3: 63).
+#                A poll cycle is discarded as a spike, keeping the last valid values, if
+#                  |current per phase| > maxCurrent * 1.2
+#                  |power per phase|   > 253 V * maxCurrent * 1.2   (63 A: ~19 kW)
+#                  |total power|       > 3 * the limit per phase    (63 A: ~57 kW)
+#                0 or unset = no check.
+#
+# source       - Upstream meter
+#   type       - tcp | rtu
+#   unitID     - Unit ID of the upstream meter
+#   timeout    - Request timeout as Go duration string (default 2s)
+#   tcp        - host, port (default 502)
+#   rtu        - port, baudRate, dataBits, parity, stopBits (default 9600 8N1)
+#
+# poll         - Reading the upstream meter
+#   interval     - Poll interval as Go duration string (default 1s)
+#   maxBlockGap  - Unused registers read along to merge fields into one request (default 4)
+#   maxBlockSize - Registers per request, at most 125 (default 125)
+#
+# map          - Canonical field -> source. Required for a Fronius meter:
+#                  power_total, power_l1..3 [W], voltage_l1..3 [V], current_l1..3 [A],
+#                  energy_import, energy_export [Wh], frequency [Hz]
+#                Optional: pf_l1..3 (default 1), voltage_l1_l2/l2_l3/l3_l1 [V]
+#                  (default phase voltage * sqrt(3)), device_id, firmware, serial_number,
+#                  serial_str. Everything else (apparent/reactive power, PF total, ...) is derived.
+#   type: register - address (0-based), dtype (uint16 | uint32 | uint64 | int16 | int32 |
+#                    int64 | float32), byteOrder, wordOrder (big | little, default big),
+#                    scale (value = (raw + offset) * 10^scale), offset
+#   type: fixed    - value
+#   type: expr     - expr, e.g. "{power_l1} + {power_l2} + {power_l3}"; operators + - * /,
+#                    parentheses, SQRT(), ABS(). Write {field}, not ${field}: ${...} is
+#                    replaced by an environment variable when the file is loaded.
+# =============================================================================
+meter:
+  # Smartfox Pro as upstream meter, served to a Fronius inverter (RS485) and wallbox/evcc (TCP).
+  # Register list (1-based in the document, 0-based here):
+  # https://smartfox.at/wp-content/uploads/2022/12/Modbus-Register-SMARTFOX-Pro-SMARTFOX-Pro-2-v22e-00.01.03.10.xlsx
+  primary_meter:
+    unitIDs: [ 1, 200 ]
+    maxCurrent: 63
 
-    # Nennstrom des Zählers je Phase in A (Fronius Smart Meter 63A-3 → 63).
-    # Plausibilitätsprüfung gegen Spikes der Quelle: Ein Abfragezyklus wird
-    # verworfen (letzte gültige Werte bleiben), wenn
-    #   |I je Phase| > max_current × 1,2
-    #   |P je Phase| > 253 V × max_current × 1,2   (63 A → ≈ 19 kW)
-    #   |P gesamt|   > 3 × Grenze je Phase          (63 A → ≈ 57 kW)
-    # 0 oder weggelassen = keine Prüfung.
-    max_current: 63
-
-    # -------------------------------------------------------------------------
-    # source — Upstream-Verbindung zum echten Zähler
-    # -------------------------------------------------------------------------
     source:
-      type: tcp             # rtu | tcp
-      unitId: 1
-      timeout: "750ms"
-      rtu:
-        port: "/dev/ttyUSB1"
-        baud_rate: 9600
-        data_bits: 8
-        parity: "N"
-        stop_bits: 1
+      type: tcp
+      unitID: 1
+      timeout: 300ms
       tcp:
-        host: "smartfox.local"
+        host: smartfox.local
         port: 502
 
-    # -------------------------------------------------------------------------
-    # poll — Leseintervall und Blockbildung
-    # -------------------------------------------------------------------------
     poll:
-      interval: "1s"
-      max_block_gap: 4      # Max. Lücke (Register) innerhalb eines Leseblocks
-      max_block_size: 125   # Max. Registerzahl pro Leseblock (Modbus-Limit 125)
+      interval: 1s
+      maxBlockGap: 10      # one request for 40999-41037 (39 registers)
+      maxBlockSize: 125
 
-    # -------------------------------------------------------------------------
-    # map — kanonisches Feld als Schlüssel, Mapping-Definition als Wert
-    # -------------------------------------------------------------------------
     map:
+      # Identification as expected by the inverter (registers 18, 768, 4176)
       device_id:
         type: fixed
         value: 285
@@ -185,209 +148,83 @@ devices:
       serial_number:
         type: fixed
         value: 99999999
-      serial_string:
-        type: fixed
-        value: "99999999"
 
-      voltage_l1:
+      energy_import:       # Wh
+        type: register
+        address: 40999
+        dtype: uint64
+      energy_export:       # Wh
+        type: register
+        address: 41003
+        dtype: uint64
+
+      power_total:         # W
+        type: register
+        address: 41017
+        dtype: int32
+      power_l1:
+        type: register
+        address: 41019
+        dtype: int32
+      power_l2:
+        type: register
+        address: 41021
+        dtype: int32
+      power_l3:
+        type: register
+        address: 41023
+        dtype: int32
+
+      voltage_l1:          # 0.1 V
         type: register
         address: 41025
         dtype: uint16
-        byte_order: big
-        scale: -1             # Rohwert 2300 → 230.0 V
+        scale: -1
       voltage_l2:
         type: register
         address: 41026
         dtype: uint16
-        byte_order: big
         scale: -1
       voltage_l3:
         type: register
         address: 41027
         dtype: uint16
-        byte_order: big
         scale: -1
-      voltage_l1_l2:
-        type: expr
-        expr: "{voltage_l1_n} * 1.732050807568877"
-      voltage_l2_l3:
-        type: expr
-        expr: "{voltage_l2_n} * 1.732050807568877"
-      voltage_l3_l1:
-        type: expr
-        expr: "{voltage_l3_n} * 1.732050807568877"
 
-      current_l1:
+      current_l1:          # mA
         type: register
         address: 41028
         dtype: uint32
-        byte_order: big
-        word_order: big
-        scale: -3             # Rohwert 15230 → 15.230 A
+        scale: -3
       current_l2:
         type: register
         address: 41030
         dtype: uint32
-        byte_order: big
-        word_order: big
         scale: -3
       current_l3:
         type: register
         address: 41032
         dtype: uint32
-        byte_order: big
-        word_order: big
         scale: -3
 
-      pf_l1:
+      pf_l1:               # 0.0001
         type: register
         address: 41034
         dtype: int16
-        byte_order: big
-        scale: -4             # Rohwert 9800 → 0.9800
+        scale: -4
       pf_l2:
         type: register
         address: 41035
         dtype: int16
-        byte_order: big
         scale: -4
       pf_l3:
         type: register
         address: 41036
         dtype: int16
-        byte_order: big
         scale: -4
 
-      frequency:
+      frequency:           # 0.01 Hz
         type: register
         address: 41037
         dtype: uint16
-        byte_order: big
-        scale: -2             # Rohwert 5000 → 50.00 Hz
-
-      power_total:
-        type: register
-        address: 41017
-        dtype: int32
-        byte_order: big
-        word_order: big
-        scale: 0
-      power_l1:
-        type: register
-        address: 41019
-        dtype: int32
-        byte_order: big
-        word_order: big
-        scale: 0
-      power_l2:
-        type: register
-        address: 41021
-        dtype: int32
-        byte_order: big
-        word_order: big
-        scale: 0
-      power_l3:
-        type: register
-        address: 41023
-        dtype: int32
-        byte_order: big
-        word_order: big
-        scale: 0
-
-      energy_import:
-        type: register
-        address: 40999
-        dtype: uint64
-        byte_order: big
-        word_order: big
-        scale: 0
-      energy_export:
-        type: register
-        address: 41003
-        dtype: uint64
-        byte_order: big
-        word_order: big
-        scale: 0
-
-  # ---------------------------------------------------------------------------
-  # Device 2: Beispiel — TCP-Quelle, fixe Frequenz, berechnete Gesamtleistung
-  # (auskommentiert — als Vorlage)
-  # ---------------------------------------------------------------------------
-  # - name: "sub_meter"
-  #   unitIds: [201]
-  #
-  #   source:
-  #     type: tcp
-  #     unitId: 1
-  #     timeout: "2s"
-  #     tcp:
-  #       host: "192.168.1.101"
-  #       port: 502
-  #
-  #   poll:
-  #     interval: "1s"
-  #     max_block_gap: 4
-  #     max_block_size: 125
-  #
-  #   map:
-  #     voltage_l1:
-  #       type: register
-  #       address: 52
-  #       dtype: uint16
-  #       scale: -1
-  #     voltage_l2:
-  #       type: register
-  #       address: 54
-  #       dtype: uint16
-  #       scale: -1
-  #     voltage_l3:
-  #       type: register
-  #       address: 56
-  #       dtype: uint16
-  #       scale: -1
-  #     current_l1:
-  #       type: register
-  #       address: 58
-  #       dtype: uint32
-  #       scale: -3
-  #     current_l2:
-  #       type: register
-  #       address: 62
-  #       dtype: uint32
-  #       scale: -3
-  #     current_l3:
-  #       type: register
-  #       address: 66
-  #       dtype: uint32
-  #       scale: -3
-  #     power_l1:
-  #       type: register
-  #       address: 40
-  #       dtype: uint32
-  #       scale: 0
-  #     power_l2:
-  #       type: register
-  #       address: 44
-  #       dtype: uint32
-  #       scale: 0
-  #     power_l3:
-  #       type: register
-  #       address: 48
-  #       dtype: uint32
-  #       scale: 0
-  #     power_total:
-  #       type: expr
-  #       expr: "{power_l1} + {power_l2} + {power_l3}"
-  #     energy_import:
-  #       type: register
-  #       address: 0
-  #       dtype: uint64
-  #       scale: 0
-  #     energy_export:
-  #       type: register
-  #       address: 8
-  #       dtype: uint64
-  #       scale: 0
-  #     frequency:
-  #       type: fixed
-  #       value: 50.0
+        scale: -2
