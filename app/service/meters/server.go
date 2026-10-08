@@ -63,6 +63,11 @@ func (s *ModbusServerService) Start(listen ListenConfig) error {
 			return err
 		}
 
+		// mbserver takes every Read from the port as one complete RTU frame. With
+		// MinimumReadSize 1 and InterCharacterTimeout 100 ms (termios VMIN/VTIME), a Read
+		// returns only once the line has been idle for 100 ms, i.e. with the whole request.
+		// goburrow/serial (used by the Modbus client) returns as soon as the first bytes
+		// arrive and would hand mbserver partial frames, so it cannot replace this library.
 		port, err := serial.Open(serial.OpenOptions{
 			PortName:              listen.RTU.Port,
 			BaudRate:              uint(listen.RTU.BaudRate),
