@@ -97,7 +97,7 @@ func TestValidateMaxCurrent(t *testing.T) {
 
 // TestRepoConfigs keeps the shipped configuration files loadable and valid.
 func TestRepoConfigs(t *testing.T) {
-	t.Setenv("SMARTMETEREMU_APIKEY", "test")
+	t.Setenv("SMARTMETER_API_KEY", "test")
 
 	for _, name := range []string{"config.yaml", "primary-meter.yaml"} {
 		t.Run(name, func(t *testing.T) {
@@ -116,7 +116,7 @@ func TestRepoConfigs(t *testing.T) {
 }
 
 func TestPrimaryMeterConfig(t *testing.T) {
-	t.Setenv("SMARTMETEREMU_APIKEY", "test")
+	t.Setenv("SMARTMETER_API_KEY", "test")
 
 	cfg, err := LoadConfig(filepath.Join("..", "config", "primary-meter.yaml"))
 	if err != nil {

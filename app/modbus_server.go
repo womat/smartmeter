@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/jacobsa/go-serial/serial"
-	"github.com/womat/smartmeteremu/pkg/fronius"
-	"github.com/womat/smartmeteremu/pkg/mbserver"
+	"github.com/womat/smartmeter/pkg/fronius"
+	"github.com/womat/smartmeter/pkg/mbserver"
 )
 
 type ModbusServerService struct {

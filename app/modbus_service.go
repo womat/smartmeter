@@ -16,7 +16,7 @@ import (
 	"time"
 
 	mb "github.com/simonvetter/modbus"
-	"github.com/womat/smartmeteremu/pkg/fronius"
+	"github.com/womat/smartmeter/pkg/fronius"
 )
 
 const (

@@ -3,7 +3,7 @@
 GOCMD=go
 GOTEST=$(GOCMD) test
 GOVET=$(GOCMD) vet
-BINARY_NAME=smartmeteremu
+BINARY_NAME=smartmeter
 DEV_CERT_DIR=./app/certs
 DEV_CERT_FILE=$(DEV_CERT_DIR)/dev_cert.pem
 DEV_KEY_FILE=$(DEV_CERT_DIR)/dev_key.pem

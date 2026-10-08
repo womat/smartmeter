@@ -1,4 +1,4 @@
-# 🚀 smartmeteremu — bla bla
+# 🚀 smartmeter — bla bla
 
 description
 
@@ -47,7 +47,7 @@ curl -k -H "X-Api-Key: your-api-key" https://localhost:8443/health
 
 | Flag        | Default                         | Description                                                         |
 |-------------|---------------------------------|---------------------------------------------------------------------|
-| `--config`  | `/opt/smartmeteremu/etc/config.yaml` | Path to the configuration file                                      |
+| `--config`  | `/opt/smartmeter/etc/config.yaml` | Path to the configuration file                                      |
 | `--debug`   | `false`                         | Enable debug logging to stdout (overrides log settings from config) |
 | `--version` | `false`                         | Print the application version and exit                              |
 | `--about`   | `false`                         | Print application details and exit                                  |
@@ -58,22 +58,22 @@ The config file path can also be set via the environment variable `CONFIG_FILE`.
 **Examples:**
 
 ```bash
-smartmeteremu --config /etc/smartmeteremu/config.yaml
-smartmeteremu --debug
-smartmeteremu --version
-CONFIG_FILE=/etc/smartmeteremu/config.yaml smartmeteremu
+smartmeter --config /etc/smartmeter/config.yaml
+smartmeter --debug
+smartmeter --version
+CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
 ```
 
 ---
 
 ## Configuration
 
-Default location: `/opt/smartmeteremu/etc/config.yaml`
+Default location: `/opt/smartmeter/etc/config.yaml`
 Environment variables are expanded inside the file, e.g. `apiKey: ${TADL_API_KEY}`.
 
 ```yaml
 # =============================================================================
-# smartmeteremu configuration
+# smartmeter configuration
 # =============================================================================
 
 # logLevel defines the minimum log level.
@@ -98,10 +98,10 @@ webserver:
   apiKey: changeme!
 
   # TLS private key file
-  keyFile: /opt/smartmeteremu/etc/key.pem
+  keyFile: /opt/smartmeter/etc/key.pem
 
   # TLS certificate file
-  certFile: /opt/smartmeteremu/etc/cert.pem
+  certFile: /opt/smartmeter/etc/cert.pem
 
   # Blocked IP addresses or networks (empty = none blocked)
   blockedIPs: [ ]
@@ -124,8 +124,8 @@ Generate a self-signed certificate for development:
 
 ```sh
 openssl req -x509 -nodes -newkey rsa:2048 \
-  -keyout /opt/smartmeteremu/etc/key.pem \
-  -out /opt/smartmeteremu/etc/cert.pem \
+  -keyout /opt/smartmeter/etc/key.pem \
+  -out /opt/smartmeter/etc/cert.pem \
   -days 825 \
   -subj "/C=AT/ST=Vienna/L=Vienna/O=MyCompany/OU=DEV/CN=localhost"
 ```
@@ -151,36 +151,36 @@ openssl req -x509 -nodes -newkey rsa:2048 \
 ### 1. Create system user and directories
 
 ```sh
-sudo groupadd -f smartmeteremu
-sudo useradd -r -s /usr/sbin/nologin -g smartmeteremu smartmeteremu
-sudo usermod -aG gpio smartmeteremu
+sudo groupadd -f smartmeter
+sudo useradd -r -s /usr/sbin/nologin -g smartmeter smartmeter
+sudo usermod -aG gpio smartmeter
 
-sudo mkdir -p /opt/smartmeteremu/{bin,etc,data}
-sudo chown -R smartmeteremu:smartmeteremu /opt/smartmeteremu
+sudo mkdir -p /opt/smartmeter/{bin,etc,data}
+sudo chown -R smartmeter:smartmeter /opt/smartmeter
 ```
 
 ### 2. Copy files
 
 ```sh
-sudo cp smartmeteremu /opt/smartmeteremu/bin/
-sudo cp config.yaml /opt/smartmeteremu/etc/
-sudo cp cert.pem key.pem /opt/smartmeteremu/etc/
-sudo chown -R smartmeteremu:smartmeteremu /opt/smartmeteremu
+sudo cp smartmeter /opt/smartmeter/bin/
+sudo cp config.yaml /opt/smartmeter/etc/
+sudo cp cert.pem key.pem /opt/smartmeter/etc/
+sudo chown -R smartmeter:smartmeter /opt/smartmeter
 ```
 
 ### 3. Create systemd service
 
 ```sh
-sudo tee /etc/systemd/system/smartmeteremu.service > /dev/null <<'EOF'
+sudo tee /etc/systemd/system/smartmeter.service > /dev/null <<'EOF'
 [Unit]
-Description=smartmeteremu — S0 Pulse Energy Monitor
+Description=smartmeter — S0 Pulse Energy Monitor
 After=network.target
 
 [Service]
-User=smartmeteremu
-Group=smartmeteremu
+User=smartmeter
+Group=smartmeter
 Type=simple
-ExecStart=/opt/smartmeteremu/bin/smartmeteremu 
+ExecStart=/opt/smartmeter/bin/smartmeter 
 Restart=on-failure
 
 [Install]
@@ -188,15 +188,15 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable smartmeteremu
-sudo systemctl start smartmeteremu
-sudo systemctl status smartmeteremu
+sudo systemctl enable smartmeter
+sudo systemctl start smartmeter
+sudo systemctl status smartmeter
 ```
 
 ### 4. View logs
 
 ```sh
-journalctl -u smartmeteremu -n 50 -f
+journalctl -u smartmeter -n 50 -f
 ```
 
 ---
@@ -227,9 +227,9 @@ make deploy
 Send `SIGHUP` to reload the configuration without restarting the process:
 
 ```sh
-sudo systemctl reload smartmeteremu
+sudo systemctl reload smartmeter
 # or
-kill -HUP $(pidof smartmeteremu)
+kill -HUP $(pidof smartmeter)
 ```
 
 ---
@@ -248,12 +248,12 @@ sudo ufw status
 
 ```sh
 # Backup
-sudo tar czf /tmp/smartmeteremu-backup.tar.gz /opt/smartmeteremu
+sudo tar czf /tmp/smartmeter-backup.tar.gz /opt/smartmeter
 
 # Restore
-sudo tar xzf /tmp/smartmeteremu-backup.tar.gz -C /
-sudo chown -R smartmeteremu:smartmeteremu /opt/smartmeteremu
-sudo systemctl restart smartmeteremu
+sudo tar xzf /tmp/smartmeter-backup.tar.gz -C /
+sudo chown -R smartmeter:smartmeter /opt/smartmeter
+sudo systemctl restart smartmeter
 ```
 
 ---

@@ -20,9 +20,9 @@ env: prod
 webserver:
   listenHost: 0.0.0.0
   listenPort: 8443
-  apiKey: ${SMARTMETEREMU_APIKEY}
-  keyFile: /opt/smartmeteremu/etc/key.pem
-  certFile: /opt/smartmeteremu/etc/cert.pem
+  apiKey: ${SMARTMETER_API_KEY}
+  keyFile: /opt/smartmeter/etc/key.pem
+  certFile: /opt/smartmeter/etc/cert.pem
   blockedIPs: []
   allowedIPs: []
 

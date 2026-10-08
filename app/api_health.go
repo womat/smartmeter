@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/womat/golib/web"
-	"github.com/womat/smartmeteremu/app/service/health"
+	"github.com/womat/smartmeter/app/service/health"
 )
 
 // HandleHealth returns the current health data of the application.

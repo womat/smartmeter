@@ -1,4 +1,4 @@
-// Package main provides the entry point for the smartmeteremu application.
+// Package main provides the entry point for the smartmeter application.
 //
 // This program initializes logging, loads configuration, handles command-line flags,
 // and starts the main application loop. It supports hot reloads of the config
@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/womat/golib/xlog"
-	"github.com/womat/smartmeteremu/app"
+	"github.com/womat/smartmeter/app"
 	"gopkg.in/yaml.v3"
 )
 
@@ -131,9 +131,9 @@ func About() string {
 		"Binary":   filepath.Join("/opt", app.MODULE, "bin", app.MODULE),
 		"Date":     buildDate,
 		"Commit":   buildCommit,
-		"Desc":     app.MODULE + " is a demo app",
+		"Desc":     app.MODULE + " emulates a Fronius Smart Meter from any Modbus TCP/RTU meter",
 		"Help":     filepath.Join("/opt", app.MODULE, "bin", app.MODULE) + " --help",
-		"Main":     filepath.Join("/opt/src", app.MODULE, "cmd", app.MODULE, "main.go"),
+		"Main":     filepath.Join("/opt/src", app.MODULE, "cmd", "main.go"),
 		"ProgLang": runtime.Version(),
 		"Repo":     "https://github.com/womat/" + app.MODULE + ".git",
 		"Version":  app.VERSION,

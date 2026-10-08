@@ -1,13 +1,13 @@
-# smartmeteremu
+# smartmeter
 
-**smartmeteremu**  is an ...
+**smartmeter**  is an ...
 
 ---
 
 ## Usage
 
 ```text
-smartmeteremu [--config FILE] [--debug] [--version] [--about] [--help]
+smartmeter [--config FILE] [--debug] [--version] [--about] [--help]
 ```
 
 ---
@@ -16,7 +16,7 @@ smartmeteremu [--config FILE] [--debug] [--version] [--about] [--help]
 
 | Flag        | Default                         | Description                                                         |
 |-------------|---------------------------------|---------------------------------------------------------------------|
-| `--config`  | `/opt/smartmeteremu/etc/config.yaml` | Path to the configuration file                                      |
+| `--config`  | `/opt/smartmeter/etc/config.yaml` | Path to the configuration file                                      |
 | `--debug`   | `false`                         | Enable debug logging to stdout (overrides log settings from config) |
 | `--version` |                                 | Print the application version and exit                              |
 | `--about`   |                                 | Print application details and exit                                  |
@@ -27,16 +27,16 @@ The config file path can also be set via the environment variable `CONFIG_FILE`.
 **Examples:**
 
 ```bash
-smartmeteremu --config /etc/smartmeteremu/config.yaml
-smartmeteremu --debug
-smartmeteremu --version
-CONFIG_FILE=/etc/smartmeteremu/config.yaml smartmeteremu
+smartmeter --config /etc/smartmeter/config.yaml
+smartmeter --debug
+smartmeter --version
+CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
 ```
 
 ---
 
 ## Configuration
 
-The configuration file is a YAML file. By default it is loaded from `/opt/smartmeteremu/etc/config.yaml`.
+The configuration file is a YAML file. By default it is loaded from `/opt/smartmeter/etc/config.yaml`.
 
 Environment variables are expanded inside the file, e.g. `apiKey: ${TADL_API_KEY}`.

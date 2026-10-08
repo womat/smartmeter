@@ -5,7 +5,7 @@ package app
 import (
 	"net/http"
 
-	_ "github.com/womat/smartmeteremu/docs"
+	_ "github.com/womat/smartmeter/docs"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )

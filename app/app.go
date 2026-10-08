@@ -7,7 +7,7 @@
 // Usage:
 //
 //	config := LoadConfig()
-//	app := app.New(config, "/opt/smartmeteremu")
+//	app := app.New(config, "/opt/smartmeter")
 //	app.Run()
 package app
 
@@ -24,19 +24,16 @@ import (
 	"syscall"
 )
 
-// VERSION holds the version information with the following logic in mind
+// VERSION is the application version, following semantic versioning
+// as described in https://semver.org/.
 //
-//	4 ... fixed
-//	0 ... year 2020, 1->year 2021, etc.
-//	7 ... month of year (7=July)
-//	the date format after the + is always the first of the month
-//
-// VERSION differs from semantic versioning as described in https://semver.org/
-// but we keep the correct syntax.
-// TODO: increase version number
+// It is not maintained in source: the Git tag is the single source of truth and
+// the value is injected at build time via -ldflags (see Makefile and
+// .goreleaser.yaml). The "dev" default applies to builds made without them.
+var VERSION = "dev"
+
 const (
-	VERSION = "1.6.2+20260228"
-	MODULE  = "smartmeteremu"
+	MODULE = "smartmeter"
 
 	ModeStop    = 0
 	ModeRestart = 1

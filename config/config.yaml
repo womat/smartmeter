@@ -29,10 +29,10 @@ webserver:
   apiKey: changeme!
 
   # TLS private key file
-  keyFile: /opt/smartmeteremu/etc/key.pem
+  keyFile: /opt/smartmeter/etc/key.pem
 
   # TLS certificate file
-  certFile: /opt/smartmeteremu/etc/cert.pem
+  certFile: /opt/smartmeter/etc/cert.pem
 
   # Blocked IP addresses or networks (empty = none blocked)
   # Examples: 192.168.0.1, 192.168.0.0/16, 10.0.0.0/8

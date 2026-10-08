@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/womat/smartmeteremu/pkg/fronius"
-	"github.com/womat/smartmeteremu/pkg/mbserver"
+	"github.com/womat/smartmeter/pkg/fronius"
+	"github.com/womat/smartmeter/pkg/mbserver"
 )
 
 type fakeRegisterReader struct {

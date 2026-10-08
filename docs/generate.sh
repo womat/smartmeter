@@ -4,7 +4,7 @@
 #
 #  Usage:
 #   go install github.com/swaggo/swag/cmd/swag@latest
-#   cd /path/to/smartmeteremu          # must be called from the project root
+#   cd /path/to/smartmeter          # must be called from the project root
 #   docs/generate.sh
 #
 swag fmt -d ./app
