@@ -62,7 +62,7 @@ type compiledDevice struct {
 
 // MeterStatus is the diagnostic state of one meter, reported by /health.
 type MeterStatus struct {
-	UnitIDs       []uint8    `json:"unitIDs"`                 // Unit IDs the meter answers on
+	UnitIDs       []int      `json:"unitIDs"`                 // Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)
 	Ready         bool       `json:"ready"`                   // Values are current, see staleAfter
 	LastSuccess   *time.Time `json:"lastSuccess,omitempty"`   // Last valid snapshot from the source
 	AgeSeconds    *float64   `json:"ageSeconds,omitempty"`    // Age of the served values
@@ -344,9 +344,12 @@ func (d *compiledDevice) status(now time.Time) MeterStatus {
 	defer d.mu.Unlock()
 
 	st := MeterStatus{
-		UnitIDs:   slices.Clone(d.Config.UnitIDs),
+		UnitIDs:   make([]int, 0, len(d.Config.UnitIDs)),
 		LastError: d.lastError,
 		Discarded: d.discarded,
+	}
+	for _, id := range d.Config.UnitIDs {
+		st.UnitIDs = append(st.UnitIDs, int(id))
 	}
 	if !d.lastSuccess.IsZero() {
 		last := d.lastSuccess

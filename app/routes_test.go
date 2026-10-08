@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/womat/golib/web"
@@ -68,6 +69,9 @@ func TestReadyAndHealthReportMeterState(t *testing.T) {
 	}
 
 	rec = serve(app, "/health", "test-key")
+	if !strings.Contains(rec.Body.String(), `"unitIDs":[1,200]`) {
+		t.Errorf("GET /health body = %s, want unitIDs as a JSON array of numbers", rec.Body)
+	}
 	var got health.Model
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("GET /health body = %s: %v", rec.Body, err)
