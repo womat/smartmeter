@@ -2,6 +2,8 @@ module github.com/womat/smartmeter
 
 go 1.27
 
+toolchain go1.27.2
+
 require (
 	github.com/simonvetter/modbus v1.6.4
 	github.com/swaggo/http-swagger v1.3.4
