@@ -33,10 +33,15 @@ the same time, so all clients see the same values from the same moment.
 - **Several unit IDs per meter** and several meters per instance
 - **Spike filter**: implausible readings (beyond what a meter of the configured rated current can
   measure) are discarded, the last valid values stay in place
+- **Source failure is visible to the inverter**: without valid values for `staleTimeout` (30 s) the
+  unit IDs stop answering, so the inverter sees a failed meter instead of frozen values; they
+  never answer before the first valid values
 - **Block reads**: neighbouring registers are fetched with one request
 - **Consistent reads**: a client never sees a 32-bit value half updated
 - **Robust RS485**: a failed serial port (e.g. an unplugged USB adapter) is reopened
   automatically, and `/ready` reports it meanwhile
+- **Web page** with energy flow, power, phases, counters and the served registers, embedded in the
+  binary and usable offline
 - **HTTPS REST API** with API key, IP allowlist / blocklist, readiness probe
 - **Hot reload** of the configuration via `SIGHUP`; a broken file is refused, the emulation goes on
 - Release builds for every Raspberry Pi architecture, from the **Pi Zero (ARMv6)** to 64-bit systems
@@ -238,6 +243,16 @@ listen:
 #                  |power per phase|   > 253 V * maxCurrent * 1.2   (63 A: ~19 kW)
 #                  |total power|       > 3 * the limit per phase    (63 A: ~57 kW)
 #                0 or unset = no check.
+# staleTimeout - Go duration (default 30s). Without a valid snapshot from the source for this
+#                long, the unit IDs stop answering (RTU silent, TCP exception 11): the
+#                inverter then sees a failed meter instead of acting on frozen values. The next
+#                valid snapshot brings them back. 0s = keep answering with the last values.
+#                The unit IDs never answer before the first valid snapshot.
+# limits       - Limits of the installation; they only scale the web page.
+#   importPower  - W drawn from the grid at most (default 3 * 230 V * current)
+#   exportPower  - W fed into the grid at most, e.g. the inverter's export limit
+#                  (default 3 * 230 V * current)
+#   current      - A per phase, e.g. the main fuse (default maxCurrent, else 63)
 #
 # source       - Upstream meter
 #   type       - tcp | rtu
@@ -272,6 +287,11 @@ meter:
   primary_meter:
     unitIDs: [ 1, 200 ]
     maxCurrent: 63
+    staleTimeout: 30s
+    limits:
+      importPower: 15000
+      exportPower: 4500
+      current: 20
 
     source:
       type: tcp
@@ -399,6 +419,16 @@ grid voltage tolerance (253 V) and a 20 % short overload:
 
 A discarded cycle is logged as `Implausible Modbus snapshot discarded` and counted in `/health`.
 
+### Source failure
+
+The unit IDs do not answer before the first valid values from the source, so a client never reads
+empty registers (an inverter would take them as 0 W). When the source stops delivering valid values,
+the last ones are served on; after `staleTimeout` (default 30 s) the unit IDs stop answering: silence
+over RTU, exception 11 over TCP. The inverter then sees a failed meter and falls back to its own
+settings, e.g. the export limit, instead of acting on frozen values. The next valid values bring the
+unit IDs back, with no moment of empty registers. Both steps are logged (`unit IDs no longer answer`,
+`unit IDs answer`). `staleTimeout: 0s` keeps answering with the last values.
+
 ---
 
 ## Register maps
@@ -450,11 +480,13 @@ The documents count from 1: register 40001 there is address 40000 here.
 
 ## REST API
 
-| Method | Path       | Auth    | Description                                                     |
-|--------|------------|---------|-----------------------------------------------------------------|
-| GET    | `/version` | —       | Application name and version                                    |
-| GET    | `/ready`   | —       | Readiness probe: 200, or 503 while a meter has delivered no valid values for three poll intervals or the RTU port is not available |
-| GET    | `/health`  | API Key | Runtime metrics and diagnostics per meter                       |
+| Method | Path                | Auth    | Description                                                     |
+|--------|---------------------|---------|-----------------------------------------------------------------|
+| GET    | `/`                 | —       | Web page; it asks for the API key and reads the endpoints below  |
+| GET    | `/version`          | —       | Application name and version                                    |
+| GET    | `/ready`            | —       | Readiness probe: 200, or 503 while a meter has delivered no valid values for three poll intervals or the RTU port is not available |
+| GET    | `/health`           | API Key | Runtime metrics, every meter with its served values, the Modbus listeners |
+| GET    | `/registers?unit=N` | API Key | Both register maps of unit ID N as a client reads them          |
 
 Authentication via the `X-API-Key` header. Errors are returned as `{"error": "..."}` with the HTTP
 status.
@@ -463,26 +495,62 @@ status.
 curl -k https://localhost:8443/version
 curl -k https://localhost:8443/ready
 curl -k -H "X-API-Key: your-api-key" https://localhost:8443/health
+curl -k -H "X-API-Key: your-api-key" "https://localhost:8443/registers?unit=1"
 ```
 
-`/health` reports, besides the runtime metrics, per meter and the state of the RTU port:
+`/health` reports, besides the runtime metrics, per meter, the state of the RTU port and the Modbus
+listeners with the requests they answered since start:
 
 ```json
 "meters": {
   "primary_meter": {
     "unitIDs": [1, 200],
+    "source": "tcp 192.168.1.10:502 unit 1",
     "ready": true,
+    "online": true,
     "lastSuccess": "2026-10-08T22:16:52+02:00",
     "ageSeconds": 0.4,
+    "latencyMs": 12.1,
+    "polls": 3600,
     "lastError": "power_total = 1.048576e+06 exceeds limit 57380.4",
     "lastErrorTime": "2026-10-08T21:03:11+02:00",
-    "discardedSnapshots": 1
+    "discardedSnapshots": 1,
+    "pollIntervalSeconds": 1,
+    "staleTimeoutSeconds": 30,
+    "maxCurrent": 63,
+    "limits": { "importPower": 15000, "exportPower": 4500, "current": 20 },
+    "values": { "power_total": -7, "power_l1": 110, "voltage_l1": 230.2, "energy_import": 66517823, "...": 0 }
   }
 },
 "rtu": [
   { "port": "/dev/ttyS0", "connected": true, "since": "2026-10-08T22:16:51+02:00" }
-]
+],
+"modbus": {
+  "tcp": { "address": "0.0.0.0:502", "requests": 3612, "clients": 1 },
+  "rtu": { "port": "/dev/ttyS0", "line": "9600 8N1", "requests": 32410 }
+}
 ```
+
+`online` is false before the first valid values and after `staleTimeout`; `offlineSince` then says
+since when. `/registers` returns every entry of the proprietary map and the SunSpec block with
+address, canonical field (empty for a fixed value), type, scale factor, raw words and decoded value,
+taken from one consistent copy.
+
+### Web page
+
+`https://<your-pi>:8443/` shows the state at a glance and refreshes every 2 seconds:
+
+- **Energy flow**: source meter → smartmeter → inverter (RS485) and TCP clients. A line turns red
+  when a link fails; its LED flashes once per poll of the source or per request of a client.
+- **Power** with direction (import/export) on a bar from the export to the import limit, the three
+  **phases** with current against the fuse, the **energy counters** and details such as frequency,
+  power factor, discarded readings and the last error.
+- **Registers** (fold-out): what the inverter and the TCP clients read, per unit ID.
+- The logo turns like the disc of a Ferraris meter: forward on import, backward on export, faster
+  with more power, still while the values are frozen.
+
+The page is part of the binary and loads nothing from the internet. It asks for the API key once and
+keeps it in the browser (`localStorage`). The bars are scaled by `limits` in the meter configuration.
 
 ---
 

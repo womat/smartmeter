@@ -16,7 +16,12 @@ Modbus –, liest smartmeter dieses Gerät aus und **antwortet als Fronius Smart
 
 Der Quellzähler wird einmal pro Intervall gelesen und unter allen Unit-IDs und auf beiden Wegen
 gleichzeitig bereitgestellt. Unplausible Werte (Spikes) werden verworfen, die letzten gültigen
-Werte bleiben stehen.
+Werte bleiben stehen. Liefert die Quelle länger als `staleTimeout` (30 s) keine gültigen Werte,
+antworten die Unit-IDs nicht mehr: Der Wechselrichter erkennt einen Zählerausfall, statt mit
+eingefrorenen Werten zu regeln.
+
+Unter `https://<dein-pi>:8443/` zeigt eine Web-Seite Energiefluss, Leistung, Phasen, Zählerstände
+und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein Internet.
 
 ## In fünf Schritten
 
@@ -30,7 +35,8 @@ Werte bleiben stehen.
 4. **Anschließen:** RS485-Adapter an den Zählereingang des Wechselrichters (D+ an D+, D− an D−,
    Abschluss 120 Ω); im Wechselrichter einen Fronius Smart Meter auf Modbus RTU, Adresse 1,
    9600 Baud einstellen.
-5. **Starten:** als systemd-Dienst, dann `https://<dein-pi>:8443/ready` prüfen.
+5. **Starten:** als systemd-Dienst, dann `https://<dein-pi>:8443/ready` prüfen oder die Web-Seite
+   `https://<dein-pi>:8443/` öffnen.
 
 Die genauen Befehle stehen im [Quick start](README.md#quick-start), alle Einstellungen unter
 [Configuration](README.md#configuration), die Herkunft der Registertabellen unter
