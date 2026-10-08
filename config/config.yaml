@@ -138,6 +138,15 @@ devices:
     # RTU und TCP. Üblich: 1 = Wechselrichter (RS485), 200 = Fronius über TCP.
     unitIds: [200]
 
+    # Nennstrom des Zählers je Phase in A (Fronius Smart Meter 63A-3 → 63).
+    # Plausibilitätsprüfung gegen Spikes der Quelle: Ein Abfragezyklus wird
+    # verworfen (letzte gültige Werte bleiben), wenn
+    #   |I je Phase| > max_current × 1,2
+    #   |P je Phase| > 253 V × max_current × 1,2   (63 A → ≈ 19 kW)
+    #   |P gesamt|   > 3 × Grenze je Phase          (63 A → ≈ 57 kW)
+    # 0 oder weggelassen = keine Prüfung.
+    max_current: 63
+
     # -------------------------------------------------------------------------
     # source — Upstream-Verbindung zum echten Zähler
     # -------------------------------------------------------------------------

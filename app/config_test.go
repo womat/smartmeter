@@ -86,3 +86,11 @@ func TestValidateUnitIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateMaxCurrent(t *testing.T) {
+	device := validTestDevice("a", 1)
+	device.MaxCurrent = -1
+	if err := validTestConfig(device).Validate(); err == nil || !strings.Contains(err.Error(), "max_current") {
+		t.Fatalf("Validate() error = %v, want max_current error", err)
+	}
+}

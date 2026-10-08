@@ -60,11 +60,12 @@ type ListenRTUConfig struct {
 }
 
 type DeviceConfig struct {
-	Name    string                   `yaml:"name"`
-	UnitIDs []uint8                  `yaml:"unitIds"` // unit IDs the emulated meter answers on
-	Source  SourceConfig             `yaml:"source"`
-	Poll    PollConfig               `yaml:"poll"`
-	Map     map[string]MappingConfig `yaml:"map"`
+	Name       string                   `yaml:"name"`
+	UnitIDs    []uint8                  `yaml:"unitIds"`     // unit IDs the emulated meter answers on
+	MaxCurrent float64                  `yaml:"max_current"` // rated current per phase in A, 0 = no plausibility check
+	Source     SourceConfig             `yaml:"source"`
+	Poll       PollConfig               `yaml:"poll"`
+	Map        map[string]MappingConfig `yaml:"map"`
 }
 
 type SourceConfig struct {
@@ -267,6 +268,9 @@ func (c *Config) validateDevice(device DeviceConfig) error {
 		if id == 0 || id > 247 {
 			return fmt.Errorf("device %q has invalid unitId %d", device.Name, id)
 		}
+	}
+	if device.MaxCurrent < 0 {
+		return fmt.Errorf("device %q has invalid max_current %g", device.Name, device.MaxCurrent)
 	}
 	if device.Source.UnitID == 0 || device.Source.UnitID > 247 {
 		return fmt.Errorf("device %q has invalid source unitId %d", device.Name, device.Source.UnitID)

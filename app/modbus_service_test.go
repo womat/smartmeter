@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/womat/smartmeteremu/pkg/fronius"
 	"github.com/womat/smartmeteremu/pkg/mbserver"
 )
 
@@ -278,5 +279,83 @@ func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitID uin
 	}
 	if got := get(40177); got != 0 {
 		t.Errorf("register 40177 (end block L) = %d, want 0", got)
+	}
+}
+
+func TestCheckPlausibility(t *testing.T) {
+	snapshot := func(field fronius.CanonicalField, value float64) fronius.Snapshot {
+		s := fronius.NewSnapshot()
+		s.Set(field, value)
+		return s
+	}
+
+	// 63 A: current 75.6 A, power per phase 19126.8 W, total 57380.4 W
+	tests := []struct {
+		name       string
+		snapshot   fronius.Snapshot
+		maxCurrent float64
+		wantErr    bool
+	}{
+		{"disabled", snapshot(fronius.FieldPowerTotal, 1e9), 0, false},
+		{"current ok", snapshot(fronius.FieldCurrentL2, 75), 63, false},
+		{"current spike", snapshot(fronius.FieldCurrentL2, 76), 63, true},
+		{"phase power ok", snapshot(fronius.FieldPowerL3, -19000), 63, false},
+		{"phase power spike", snapshot(fronius.FieldPowerL3, -19200), 63, true},
+		{"total power ok", snapshot(fronius.FieldPowerTotal, 57000), 63, false},
+		{"total power spike", snapshot(fronius.FieldPowerTotal, -57500), 63, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkPlausibility(tc.snapshot, tc.maxCurrent)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("checkPlausibility() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestPollAndUpdateDiscardsSpike(t *testing.T) {
+	device, err := compileDevice(DeviceConfig{
+		Name:       "main_meter",
+		UnitIDs:    []uint8{1},
+		MaxCurrent: 63,
+		Map: map[string]MappingConfig{
+			"power_total": {Type: "register", Address: 0, DType: "int32", ByteOrder: "big", WordOrder: "big"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("compileDevice() error = %v", err)
+	}
+
+	reader := &fakeRegisterReader{registers: map[uint16]uint16{0: 0, 1: 1500}}
+	device.Reader = reader
+
+	server := &ModbusServerService{server: mbserver.NewServer()}
+	defer server.Close()
+
+	power := func() int32 {
+		t.Helper()
+		hi, _ := server.server.GetHoldingRegister(1, 4116)
+		lo, _ := server.server.GetHoldingRegister(1, 4117)
+		return int32(uint32(hi)<<16 | uint32(lo))
+	}
+
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatalf("pollAndUpdate() error = %v", err)
+	}
+	valid := device.LastSuccess
+
+	// 0x00100000 W = 1048576 W, far above what a 63 A meter can measure.
+	reader.registers[0], reader.registers[1] = 0x0010, 0
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatalf("pollAndUpdate() error = %v", err)
+	}
+
+	if got := power(); got != 150000 {
+		t.Errorf("register 4116 = %d, want last valid value 150000", got)
+	}
+	if !device.LastSuccess.Equal(valid) {
+		t.Errorf("LastSuccess updated on discarded snapshot")
 	}
 }

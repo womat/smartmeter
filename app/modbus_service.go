@@ -23,6 +23,9 @@ const (
 	defaultDeviceID     = 285
 	defaultFirmwareCode = 117
 	defaultSerialNumber = 99999999
+
+	maxGridVoltage     = 253.0 // 230 V + 10 % (EN 50160)
+	plausibilityMargin = 1.2   // short overload above the rated current
 )
 
 type registerReader interface {
@@ -247,6 +250,12 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 		return err
 	}
 
+	// Discard spikes from the source; the last valid values stay in place.
+	if err = checkPlausibility(snapshot, d.Config.MaxCurrent); err != nil {
+		slog.Warn("Implausible Modbus snapshot discarded", "device", d.Config.Name, "error", err)
+		return nil
+	}
+
 	// The same snapshot is served on every unit ID; only the SunSpec
 	// Modbus address (40068) differs per unit ID.
 	for _, id := range d.Config.UnitIDs {
@@ -333,6 +342,35 @@ func applyExpressionMappings(snapshot *fronius.Snapshot, mappings []compiledMapp
 			return fmt.Errorf("field %q: %w", mapping.ConfigName, err)
 		}
 		snapshot.Set(mapping.Field, result)
+	}
+	return nil
+}
+
+// checkPlausibility rejects values a meter rated for maxCurrent per phase cannot
+// measure. Limits allow for the upper grid voltage tolerance (253 V) and a short
+// overload margin before the breaker trips. maxCurrent 0 disables the check.
+func checkPlausibility(snapshot fronius.Snapshot, maxCurrent float64) error {
+	if maxCurrent <= 0 {
+		return nil
+	}
+
+	currentLimit := maxCurrent * plausibilityMargin
+	phasePowerLimit := maxGridVoltage * currentLimit
+	limits := []struct {
+		fields []fronius.CanonicalField
+		limit  float64
+	}{
+		{[]fronius.CanonicalField{fronius.FieldCurrentL1, fronius.FieldCurrentL2, fronius.FieldCurrentL3}, currentLimit},
+		{[]fronius.CanonicalField{fronius.FieldPowerL1, fronius.FieldPowerL2, fronius.FieldPowerL3}, phasePowerLimit},
+		{[]fronius.CanonicalField{fronius.FieldPowerTotal}, 3 * phasePowerLimit},
+	}
+
+	for _, l := range limits {
+		for _, field := range l.fields {
+			if value := snapshot.Float64(field); math.Abs(value) > l.limit {
+				return fmt.Errorf("%s = %g exceeds limit %g", field, value, l.limit)
+			}
+		}
 	}
 	return nil
 }
