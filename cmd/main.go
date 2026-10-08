@@ -9,13 +9,16 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"syscall"
 	"time"
 
-	"github.com/womat/golib/xlog"
 	"github.com/womat/smartmeter/app"
 	"gopkg.in/yaml.v3"
 )
@@ -75,49 +78,84 @@ func main() {
 // It supports hot-reloading of the configuration and handles graceful shutdown.
 func run(configFile string, debug bool) int {
 
-	var logger *xlog.LoggerWrapper
-	defer func() {
-		if logger != nil {
-			logger.Close()
-		}
-	}()
+	// closeLog releases the current log file, if logging goes to one.
+	closeLog := func() error { return nil }
+	defer func() { _ = closeLog() }()
 
 	fmt.Printf("Starting %s %s\n", app.MODULE, app.VERSION)
+	fmt.Printf("Loading configuration from: %s\n", configFile)
+
+	// Subscribe once for the whole process, not per App: between two lifecycles no App is
+	// listening, and without a subscription a SIGTERM or a second SIGHUP in that gap would end
+	// the process with the default action instead of a graceful stop. Here the signal
+	// waits in the buffer and the next App handles it.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(signals)
+
+	config, err := loadConfig(configFile, debug)
+	if err != nil {
+		fmt.Printf("Failed to load config file %s: %s\n", configFile, err.Error())
+		return 1
+	}
+
+	// lastGood is the configuration the last App ran with. A restart whose new configuration
+	// passes the check but still fails to start (TLS certificate missing, port or serial line
+	// busy, upstream meter unreachable) falls back to it, so a reload never stops the emulation.
+	var lastGood *app.Config
 
 	for {
-		// Reload configuration on every restart
-		config, err := loadConfig(configFile, debug)
-		if err != nil {
-			fmt.Printf("Failed to load config file %s: %s\n", configFile, err.Error())
-			return 1
-		}
-
-		// Close previous logger if exists
-		if logger != nil {
-			logger.Close()
-		}
-
-		// Initialize logger
-		if logger, err = xlog.Init(config.LogDestination, config.LogLevel); err != nil {
+		// Switch to the new logger before closing the previous log file, so no line written
+		// in between goes to a file that is already closed. A log destination that cannot be
+		// opened on a reload keeps the current logger.
+		logger, closeNew, err := newLogger(config.LogDestination, config.LogLevel)
+		switch {
+		case err != nil && lastGood == nil:
 			fmt.Printf("Failed to initialize logger: %s\n", err.Error())
 			return 1
+		case err != nil:
+			slog.Error("Failed to initialize logger, keeping the current one", "error", err)
+		default:
+			slog.SetDefault(logger)
+			_ = closeLog()
+			closeLog = closeNew
+			slog.Info("Logging initialized/reloaded", "logLevel", config.LogLevel)
 		}
 
-		slog.SetDefault(logger.Logger)
-		slog.Info("Logging initialized/reloaded", "logLevel", config.LogLevel)
+		for _, warning := range config.Warnings() {
+			slog.Warn("Configuration warning", "warning", warning)
+		}
 
-		// Create and run the application
-		a, err := app.New(config, filepath.Join("/opt", app.MODULE)).Run()
+		// A SIGHUP restart only goes ahead when the config file still loads and validates;
+		// otherwise the running App keeps going with its current configuration.
+		checkReload := func() error {
+			_, err := loadConfig(configFile, debug)
+			return err
+		}
+
+		// Create and run the application. A failed Run has released everything it acquired.
+		a, err := app.New(config, signals, checkReload).Run()
 		if err != nil {
-			slog.Error("Critical error occurred, shutting down", "error", err)
-			return 1
+			if lastGood == nil || config == lastGood {
+				slog.Error("Critical error occurred, shutting down", "error", err)
+				return 1
+			}
+			slog.Error("Start with the new configuration failed, continuing with the previous one", "error", err)
+			config = lastGood
+			continue
 		}
+		lastGood = config
 
 		// Wait for restart or shutdown signals
 		select {
 		case <-a.Restart():
 			slog.Info("Reloading configuration", "configFile", configFile)
 			time.Sleep(time.Second) // prevent tight restart loops
+			// The file was checked before the restart, but it may have changed since.
+			if config, err = loadConfig(configFile, debug); err != nil {
+				slog.Error("Config reload failed, continuing with the previous configuration", "error", err)
+				config = lastGood
+			}
 		case <-a.Shutdown():
 			slog.Info("Shutdown requested")
 			return 0
@@ -166,4 +204,43 @@ func loadConfig(configFile string, debug bool) (*app.Config, error) {
 	}
 
 	return config, nil
+}
+
+// newLogger returns a text logger writing to dest - "stdout", "stderr", "null" or a file path,
+// opened for appending - at the given level (debug, info, warn/warning, error; anything else
+// is info). Source locations are added at debug level only. The returned function closes the
+// log file and is a no-op for the other destinations.
+func newLogger(dest, level string) (*slog.Logger, func() error, error) {
+	var out io.Writer
+	closeFn := func() error { return nil }
+
+	switch strings.ToLower(strings.TrimSpace(dest)) {
+	case "stdout":
+		out = os.Stdout
+	case "stderr":
+		out = os.Stderr
+	case "null":
+		out = io.Discard
+	default:
+		file, err := os.OpenFile(dest, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
+		if err != nil {
+			return nil, nil, err
+		}
+		out, closeFn = file, file.Close
+	}
+
+	var lvl slog.Level
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn", "warning":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+
+	handler := slog.NewTextHandler(out, &slog.HandlerOptions{AddSource: lvl == slog.LevelDebug, Level: lvl})
+	return slog.New(handler), closeFn, nil
 }

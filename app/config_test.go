@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/womat/smartmeter/app/service/meters"
 )
 
 // writeConfig writes content to a temporary config file and returns its path.
@@ -18,18 +20,18 @@ func writeConfig(t *testing.T, content string) string {
 	return file
 }
 
-func validTestConfig(meters map[string]MeterConfig) *Config {
+func validTestConfig(meters map[string]meters.MeterConfig) *Config {
 	cfg := NewConfig()
 	cfg.Webserver.ApiKey = "test"
 	cfg.Meter = meters
 	return cfg
 }
 
-func validTestMeter(unitIDs ...uint8) MeterConfig {
-	return MeterConfig{
+func validTestMeter(unitIDs ...uint8) meters.MeterConfig {
+	return meters.MeterConfig{
 		UnitIDs: unitIDs,
-		Source:  SourceConfig{Type: "tcp", UnitID: 1, TCP: TCPSourceConfig{Host: "127.0.0.1"}},
-		Map:     map[string]MappingConfig{"frequency": {Type: "fixed", Value: 50}},
+		Source:  meters.SourceConfig{Type: "tcp", UnitID: 1, TCP: meters.TCPSourceConfig{Host: "127.0.0.1"}},
+		Map:     map[string]meters.MappingConfig{"frequency": {Type: "fixed", Value: 50}},
 	}
 }
 
@@ -41,13 +43,13 @@ func TestLoadConfigExample(t *testing.T) {
 	if err = cfg.Validate(); err != nil {
 		t.Fatalf("the shipped example config does not validate: %v", err)
 	}
-	if _, err = NewModbusService(cfg); err != nil {
+	if _, err = meters.NewModbusService(cfg.Meter); err != nil {
 		t.Fatalf("NewModbusService() error = %v", err)
 	}
 
 	meter, ok := cfg.Meter["primary_meter"]
 	if !ok {
-		t.Fatalf("the example config defines no meter primary_meter, got %v", cfg.MeterNames())
+		t.Fatalf("the example config defines no meter primary_meter, got %v", meters.Names(cfg.Meter))
 	}
 	if meter.Name != "primary_meter" {
 		t.Errorf("Name = %q, want the map key", meter.Name)
@@ -58,14 +60,9 @@ func TestLoadConfigExample(t *testing.T) {
 	if !cfg.Listen.RTU.Enabled || cfg.Listen.RTU.Port != "/dev/ttyS0" {
 		t.Errorf("RTU listener = %+v, want enabled on /dev/ttyS0", cfg.Listen.RTU)
 	}
-
-	// The Smartfox block is read with a single request, like the old emulator.
-	compiled, err := compileDevice(meter)
-	if err != nil {
-		t.Fatalf("compileDevice() error = %v", err)
-	}
-	if want := []readBlock{{Start: 40999, Quantity: 39}}; !slices.Equal(compiled.Blocks, want) {
-		t.Errorf("Blocks = %v, want %v", compiled.Blocks, want)
+	// One request for the whole Smartfox block, see TestSmartfoxSingleReadBlock.
+	if meter.Poll.MaxBlockGap != 10 {
+		t.Errorf("maxBlockGap = %d, want 10", meter.Poll.MaxBlockGap)
 	}
 }
 
@@ -127,17 +124,17 @@ func TestLoadConfigRejectsDurationWithoutUnit(t *testing.T) {
 func TestValidateUnitIDs(t *testing.T) {
 	tests := []struct {
 		name    string
-		meters  map[string]MeterConfig
+		meters  map[string]meters.MeterConfig
 		wantErr string // empty = valid
 	}{
-		{"single", map[string]MeterConfig{"a": validTestMeter(200)}, ""},
-		{"multiple", map[string]MeterConfig{"a": validTestMeter(1, 200)}, ""},
-		{"several meters", map[string]MeterConfig{"a": validTestMeter(1, 200), "b": validTestMeter(201)}, ""},
-		{"missing", map[string]MeterConfig{"a": validTestMeter()}, "unitIDs requires at least one entry"},
-		{"zero", map[string]MeterConfig{"a": validTestMeter(0)}, "invalid unitID 0"},
-		{"too large", map[string]MeterConfig{"a": validTestMeter(248)}, "invalid unitID 248"},
-		{"duplicate in meter", map[string]MeterConfig{"a": validTestMeter(200, 200)}, `unitID 200 is used by meter "a" and meter "a"`},
-		{"duplicate across meters", map[string]MeterConfig{"a": validTestMeter(1, 200), "b": validTestMeter(200)}, `unitID 200 is used by meter "a" and meter "b"`},
+		{"single", map[string]meters.MeterConfig{"a": validTestMeter(200)}, ""},
+		{"multiple", map[string]meters.MeterConfig{"a": validTestMeter(1, 200)}, ""},
+		{"several meters", map[string]meters.MeterConfig{"a": validTestMeter(1, 200), "b": validTestMeter(201)}, ""},
+		{"missing", map[string]meters.MeterConfig{"a": validTestMeter()}, "unitIDs requires at least one entry"},
+		{"zero", map[string]meters.MeterConfig{"a": validTestMeter(0)}, "invalid unitID 0"},
+		{"too large", map[string]meters.MeterConfig{"a": validTestMeter(248)}, "invalid unitID 248"},
+		{"duplicate in meter", map[string]meters.MeterConfig{"a": validTestMeter(200, 200)}, `unitID 200 is used by meter "a" and meter "a"`},
+		{"duplicate across meters", map[string]meters.MeterConfig{"a": validTestMeter(1, 200), "b": validTestMeter(200)}, `unitID 200 is used by meter "a" and meter "b"`},
 	}
 
 	for _, tc := range tests {
@@ -156,7 +153,7 @@ func TestValidateUnitIDs(t *testing.T) {
 func TestValidateMaxCurrent(t *testing.T) {
 	meter := validTestMeter(1)
 	meter.MaxCurrent = -1
-	err := validTestConfig(map[string]MeterConfig{"a": meter}).Validate()
+	err := validTestConfig(map[string]meters.MeterConfig{"a": meter}).Validate()
 	if err == nil || !strings.Contains(err.Error(), "maxCurrent") {
 		t.Fatalf("Validate() error = %v, want maxCurrent error", err)
 	}

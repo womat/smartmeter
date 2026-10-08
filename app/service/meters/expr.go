@@ -1,4 +1,4 @@
-package app
+package meters
 
 import (
 	"fmt"

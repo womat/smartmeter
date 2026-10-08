@@ -1,4 +1,4 @@
-package app
+package meters
 
 import (
 	"fmt"
@@ -18,18 +18,19 @@ type ModbusServerService struct {
 	rtuListener io.ReadWriteCloser
 }
 
-func NewModbusServerService(config *Config) (*ModbusServerService, error) {
-	if len(config.Meter) == 0 {
+// NewModbusServerService creates the Modbus server with one device per unit ID of every meter.
+func NewModbusServerService(meters map[string]MeterConfig) (*ModbusServerService, error) {
+	if len(meters) == 0 {
 		return nil, nil
 	}
 
-	if err := checkUniqueUnitIDs(config); err != nil {
+	if err := CheckUniqueUnitIDs(meters); err != nil {
 		return nil, err
 	}
 
 	service := &ModbusServerService{server: mbserver.NewServer()}
-	for _, name := range config.MeterNames() {
-		for _, id := range config.Meter[name].UnitIDs {
+	for _, name := range Names(meters) {
+		for _, id := range meters[name].UnitIDs {
 			// unit ID 1 is created by mbserver.NewServer
 			if id == 1 {
 				continue

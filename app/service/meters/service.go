@@ -1,4 +1,4 @@
-package app
+package meters
 
 import (
 	"context"
@@ -52,8 +52,28 @@ type compiledDevice struct {
 	ExprMappings     []compiledMapping
 	Blocks           []readBlock
 	Reader           registerReader
-	LastSuccess      time.Time
+
+	mu            sync.Mutex // guards the fields below, read by Status from the web server
+	lastSuccess   time.Time  // last snapshot written to the Modbus server
+	lastError     string     // last failed or discarded poll
+	lastErrorTime time.Time
+	discarded     uint64 // snapshots discarded by the plausibility check
 }
+
+// MeterStatus is the diagnostic state of one meter, reported by /health.
+type MeterStatus struct {
+	UnitIDs       []uint8    `json:"unitIDs"`                 // Unit IDs the meter answers on
+	Ready         bool       `json:"ready"`                   // Values are current, see staleAfter
+	LastSuccess   *time.Time `json:"lastSuccess,omitempty"`   // Last valid snapshot from the source
+	AgeSeconds    *float64   `json:"ageSeconds,omitempty"`    // Age of the served values
+	LastError     string     `json:"lastError,omitempty"`     // Last failed or discarded poll
+	LastErrorTime *time.Time `json:"lastErrorTime,omitempty"` // Time of LastError
+	Discarded     uint64     `json:"discardedSnapshots"`      // Snapshots discarded as implausible
+}
+
+// staleAfter is how many poll intervals the served values may be old before the meter
+// counts as not ready.
+const staleAfter = 3
 
 type snapshotWriter interface {
 	WriteSnapshot(unitID uint8, snapshot fronius.Snapshot) error
@@ -65,18 +85,19 @@ type ModbusService struct {
 	devices []*compiledDevice
 }
 
-func NewModbusService(config *Config) (*ModbusService, error) {
-	if len(config.Meter) == 0 {
+// NewModbusService compiles the polling of every meter; Start begins polling.
+func NewModbusService(meters map[string]MeterConfig) (*ModbusService, error) {
+	if len(meters) == 0 {
 		return nil, nil
 	}
 
-	if err := checkUniqueUnitIDs(config); err != nil {
+	if err := CheckUniqueUnitIDs(meters); err != nil {
 		return nil, err
 	}
 
 	service := &ModbusService{}
-	for _, name := range config.MeterNames() {
-		meter := config.Meter[name]
+	for _, name := range Names(meters) {
+		meter := meters[name]
 		meter.Name = name
 		device, err := compileDevice(meter)
 		if err != nil {
@@ -135,6 +156,36 @@ func (s *ModbusService) Close() error {
 
 	s.wg.Wait()
 	return errs
+}
+
+// Status returns the diagnostic state of every meter, keyed by name.
+func (s *ModbusService) Status(now time.Time) map[string]MeterStatus {
+	status := make(map[string]MeterStatus)
+	if s == nil {
+		return status
+	}
+	for _, device := range s.devices {
+		status[device.Config.Name] = device.status(now)
+	}
+	return status
+}
+
+// Ready reports an error while a meter has not delivered a valid snapshot within
+// staleAfter poll intervals: the Modbus server then serves outdated values.
+func (s *ModbusService) Ready(now time.Time) error {
+	if s == nil {
+		return nil
+	}
+	var stale []string
+	for _, device := range s.devices {
+		if !device.status(now).Ready {
+			stale = append(stale, device.Config.Name)
+		}
+	}
+	if len(stale) > 0 {
+		return fmt.Errorf("no current values from meter %s", strings.Join(stale, ", "))
+	}
+	return nil
 }
 
 func (s *ModbusService) closeReaders(readers []registerReader) error {
@@ -249,11 +300,13 @@ func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 	snapshot, err := d.pollSnapshot()
 	if err != nil {
+		d.recordError(err, false)
 		return err
 	}
 
 	// Discard spikes from the source; the last valid values stay in place.
 	if err = checkPlausibility(snapshot, d.Config.MaxCurrent); err != nil {
+		d.recordError(err, true)
 		slog.Warn("Implausible Modbus snapshot discarded", "meter", d.Config.Name, "error", err)
 		return nil
 	}
@@ -263,13 +316,49 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 	for _, id := range d.Config.UnitIDs {
 		snapshot.Set(fronius.FieldModbusAddr, float64(id))
 		if err = writer.WriteSnapshot(id, snapshot); err != nil {
-			return fmt.Errorf("unitId %d: %w", id, err)
+			err = fmt.Errorf("unitID %d: %w", id, err)
+			d.recordError(err, false)
+			return err
 		}
 	}
 
-	d.LastSuccess = time.Now()
+	d.mu.Lock()
+	d.lastSuccess = time.Now()
+	d.mu.Unlock()
 	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIDs", d.Config.UnitIDs)
 	return nil
+}
+
+func (d *compiledDevice) recordError(err error, discarded bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastError = err.Error()
+	d.lastErrorTime = time.Now()
+	if discarded {
+		d.discarded++
+	}
+}
+
+func (d *compiledDevice) status(now time.Time) MeterStatus {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	st := MeterStatus{
+		UnitIDs:   slices.Clone(d.Config.UnitIDs),
+		LastError: d.lastError,
+		Discarded: d.discarded,
+	}
+	if !d.lastSuccess.IsZero() {
+		last := d.lastSuccess
+		age := now.Sub(last).Seconds()
+		st.LastSuccess, st.AgeSeconds = &last, &age
+		st.Ready = now.Sub(last) <= staleAfter*d.Config.Poll.Interval
+	}
+	if !d.lastErrorTime.IsZero() {
+		t := d.lastErrorTime
+		st.LastErrorTime = &t
+	}
+	return st
 }
 
 func (d *compiledDevice) pollSnapshot() (fronius.Snapshot, error) {

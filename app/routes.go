@@ -1,17 +1,8 @@
-// Package app sets up HTTP routes and middleware for the application.
-// It supports authentication, Swagger documentation (dev only), and monitoring endpoints.
-// Routes:
-// - Public routes without authentication (e.g., version)
-// - Protected routes requiring API key or JWT
-// - Swagger documentation (only in development) at /swagger/
-// - Health, Live, Ready, Monitoring, and S0 data endpoints
-//
-// Middleware applied:
-// - CORS
-// - IP filtering (allowed/blocked IPs)
-//
-// This must be called during app startup before starting the HTTP server.
 package app
+
+// HTTP routes and global middleware. /version and /ready are public; /health requires the
+// API key (X-API-Key). Swagger UI is registered only in builds with the swagger tag.
+// Middleware, outermost first: logging, IP filter, CORS.
 
 import (
 	"log/slog"
@@ -38,12 +29,14 @@ func (app *App) SetupRoutes() {
 
 	// Public routes
 	mux.Handle("GET /version", app.HandleVersion())
+	mux.Handle("GET /ready", app.HandleReady())
 
 	// Protected routes
 	mux.Handle("GET /health", web.WithAuth(app.HandleHealth(), webCfg))
 
-	// Apply global middleware: CORS + IP filter
-	handler := web.WithCORS(mux)
+	// Apply global middleware: CORS + IP filter. The API is read-only, so CORS advertises
+	// GET and the preflight OPTIONS only.
+	handler := web.WithCORS(mux, web.WithAllowedMethods(http.MethodGet, http.MethodOptions))
 	handler = web.WithIPFilter(handler, app.config.Webserver.AllowedIPs, app.config.Webserver.BlockedIPs)
 	handler = WithLogging(handler)
 	app.web.Handler = handler

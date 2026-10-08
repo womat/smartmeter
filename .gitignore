@@ -2,3 +2,4 @@
 /test.yaml
 /cmd/config.yaml
 .idea
+/app/certs/

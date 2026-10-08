@@ -9,6 +9,8 @@ import (
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/womat/smartmeter/app/service/meters"
 )
 
 // Model holds the main system and runtime health information.
@@ -23,6 +25,10 @@ type Model struct {
 	HeapAllocBytes uint64  `json:"heapAllocBytes"` // Allocated heap memory in bytes
 	SysMemoryBytes uint64  `json:"sysMemoryBytes"` // Total memory obtained from the OS
 	Timestamp      string  `json:"timestamp"`      // UTC timestamp when health info was collected (RFC3339)
+
+	// Meters holds the diagnostic state per meter name: unit IDs, the last valid snapshot,
+	// the last error and the snapshots discarded as implausible. Filled in by the caller.
+	Meters map[string]meters.MeterStatus `json:"meters"`
 }
 
 var startTime = time.Now() // Tracks application start time

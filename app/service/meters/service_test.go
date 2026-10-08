@@ -1,8 +1,10 @@
-package app
+package meters
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -344,7 +346,7 @@ func TestPollAndUpdateDiscardsSpike(t *testing.T) {
 	if err := device.pollAndUpdate(server); err != nil {
 		t.Fatalf("pollAndUpdate() error = %v", err)
 	}
-	valid := device.LastSuccess
+	valid := device.status(time.Now()).LastSuccess
 
 	// 0x00100000 W = 1048576 W, far above what a 63 A meter can measure.
 	reader.registers[0], reader.registers[1] = 0x0010, 0
@@ -355,7 +357,58 @@ func TestPollAndUpdateDiscardsSpike(t *testing.T) {
 	if got := power(); got != 150000 {
 		t.Errorf("register 4116 = %d, want last valid value 150000", got)
 	}
-	if !device.LastSuccess.Equal(valid) {
+	if got := device.status(time.Now()).LastSuccess; valid == nil || got == nil || !got.Equal(*valid) {
 		t.Errorf("LastSuccess updated on discarded snapshot")
+	}
+}
+
+// TestSmartfoxSingleReadBlock checks that the Smartfox map of config/config.yaml is read with
+// one request (40999-41037), like the old emulator, when maxBlockGap is 10.
+func TestSmartfoxSingleReadBlock(t *testing.T) {
+	reg := func(address uint16, dtype string) MappingConfig {
+		return MappingConfig{Type: "register", Address: address, DType: dtype}
+	}
+	device, err := compileDevice(MeterConfig{
+		Poll: PollConfig{MaxBlockGap: 10, MaxBlockSize: 125},
+		Map: map[string]MappingConfig{
+			"energy_import": reg(40999, "uint64"), "energy_export": reg(41003, "uint64"),
+			"power_total": reg(41017, "int32"), "power_l1": reg(41019, "int32"),
+			"power_l2": reg(41021, "int32"), "power_l3": reg(41023, "int32"),
+			"voltage_l1": reg(41025, "uint16"), "voltage_l2": reg(41026, "uint16"), "voltage_l3": reg(41027, "uint16"),
+			"current_l1": reg(41028, "uint32"), "current_l2": reg(41030, "uint32"), "current_l3": reg(41032, "uint32"),
+			"pf_l1": reg(41034, "int16"), "pf_l2": reg(41035, "int16"), "pf_l3": reg(41036, "int16"),
+			"frequency": reg(41037, "uint16"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("compileDevice() error = %v", err)
+	}
+	if want := []readBlock{{Start: 40999, Quantity: 39}}; !slices.Equal(device.Blocks, want) {
+		t.Errorf("Blocks = %v, want %v", device.Blocks, want)
+	}
+}
+
+func TestStatusAndReady(t *testing.T) {
+	device := &compiledDevice{Config: MeterConfig{Name: "m", UnitIDs: []uint8{1}, Poll: PollConfig{Interval: time.Second}}}
+	service := &ModbusService{devices: []*compiledDevice{device}}
+	now := time.Now()
+
+	if err := service.Ready(now); err == nil {
+		t.Error("Ready() = nil before the first snapshot, want an error")
+	}
+
+	device.lastSuccess = now.Add(-2 * time.Second)
+	if err := service.Ready(now); err != nil {
+		t.Errorf("Ready() = %v with a 2 s old snapshot, want nil", err)
+	}
+
+	device.recordError(errors.New("spike"), true)
+	st := service.Status(now)["m"]
+	if !st.Ready || st.Discarded != 1 || st.LastError != "spike" || st.AgeSeconds == nil || *st.AgeSeconds != 2 {
+		t.Errorf("Status() = %+v, want ready, 1 discarded, lastError spike, age 2", st)
+	}
+
+	if err := service.Ready(now.Add(2 * time.Second)); err == nil {
+		t.Error("Ready() = nil with a 4 s old snapshot at 1 s interval, want an error")
 	}
 }
