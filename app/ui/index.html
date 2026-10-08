@@ -71,6 +71,8 @@ body {
   margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui);
   font-size: 15px; line-height: 1.45; padding: 0 16px;
 }
+/* Without this, a class that sets display (.banner, .link) would show an element marked hidden. */
+[hidden] { display: none !important; }
 .wrap { max-width: 1080px; margin: 0 auto; padding-block: 16px 40px; }
 .stack { display: flex; flex-direction: column; gap: 20px; }
 button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -412,8 +414,9 @@ function signed(w, unit = "W") {
   return (sign ? `<span class="sign">${sign}</span>` : "") + power(w, unit);
 }
 const cls = w => w > 0 ? "import-c" : w < 0 ? "export-c" : "";
-// Address parts joined by a separator, breaking only between parts.
-const addr = parts => parts.map(x => `<span>${esc(x)}</span>`).join(" · ");
+// Address parts, breaking only between parts; the separator starts the next part, so a wrapped
+// line does not end in a dangling "·".
+const addr = parts => parts.map((x, i) => `<span>${i ? "· " : ""}${esc(x)}</span>`).join(" ");
 
 function link(kind, tag, title, led) {
   return `<div class="link ${kind}" title="${esc(title || tag)}"><span class="wire"></span><span class="dot" data-led="${esc(led)}"></span><span class="tag">${esc(tag)}</span></div>`;

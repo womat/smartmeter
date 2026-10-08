@@ -138,3 +138,11 @@ func TestRegistersRoute(t *testing.T) {
 		t.Errorf("GET /registers?unit=200 = unit %d online %v, %d/%d rows", dump.UnitID, dump.Online, len(dump.Proprietary), len(dump.SunSpec))
 	}
 }
+
+// The page hides the banner and other elements with the hidden attribute; a class that sets
+// display would override it without this rule.
+func TestWebPageHidesHiddenElements(t *testing.T) {
+	if !strings.Contains(string(uiPage), "[hidden] { display: none !important; }") {
+		t.Error("app/ui/index.html lacks the [hidden] rule: an empty banner would show")
+	}
+}
