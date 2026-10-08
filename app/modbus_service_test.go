@@ -141,3 +141,124 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 		t.Fatalf("register 40081 = %d, want %d", lineLine, want)
 	}
 }
+
+// TestPollAndUpdateWritesLegacyFroniusMap checks the proprietary 4096 map against
+// values read from the productive emulator on primary-meter (Smartfox as source).
+func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
+	reg := func(address uint16, dtype string, scale int) MappingConfig {
+		return MappingConfig{Type: "register", Address: address, DType: dtype, ByteOrder: "big", WordOrder: "big", Scale: scale}
+	}
+
+	device, err := compileDevice(DeviceConfig{
+		Name:   "primary_meter",
+		UnitID: 1,
+		Source: SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
+		Poll:   PollConfig{Interval: time.Second, MaxBlockGap: 4, MaxBlockSize: 125},
+		Map: map[string]MappingConfig{
+			"energy_import": reg(40999, "uint64", 0),
+			"energy_export": reg(41003, "uint64", 0),
+			"power_total":   reg(41017, "int32", 0),
+			"power_l1":      reg(41019, "int32", 0),
+			"power_l2":      reg(41021, "int32", 0),
+			"power_l3":      reg(41023, "int32", 0),
+			"voltage_l1":    reg(41025, "uint16", -1),
+			"voltage_l2":    reg(41026, "uint16", -1),
+			"voltage_l3":    reg(41027, "uint16", -1),
+			"current_l1":    reg(41028, "uint32", -3),
+			"current_l2":    reg(41030, "uint32", -3),
+			"current_l3":    reg(41032, "uint32", -3),
+			"pf_l1":         reg(41034, "int16", -4),
+			"pf_l2":         reg(41035, "int16", -4),
+			"pf_l3":         reg(41036, "int16", -4),
+			"frequency":     reg(41037, "uint16", -2),
+		},
+	})
+	if err != nil {
+		t.Fatalf("compileDevice() error = %v", err)
+	}
+
+	neg := func(v int32) uint16 { return uint16(uint32(v) & 0xFFFF) }
+	device.Reader = &fakeRegisterReader{
+		registers: map[uint16]uint16{
+			40999: 0, 41000: 0, 41001: 1014, 41002: 64250, // 66517754 Wh
+			41003: 0, 41004: 0, 41005: 259, 41006: 4844, // 16978668 Wh
+			41017: 0xFFFF, 41018: neg(-16),
+			41019: 0, 41020: 39,
+			41021: 0xFFFF, 41022: neg(-33),
+			41023: 0xFFFF, 41024: neg(-22),
+			41025: 2291, 41026: 2324, 41027: 2322,
+			41028: 0, 41029: 571,
+			41030: 0, 41031: 413,
+			41032: 0, 41033: 571,
+			41034: 8200, 41035: neg(-9200), 41036: neg(-9900),
+			41037: 5000,
+		},
+	}
+
+	server := &ModbusServerService{server: mbserver.NewServer()}
+	defer server.Close()
+
+	if err := device.pollAndUpdate(server); err != nil {
+		t.Fatalf("pollAndUpdate() error = %v", err)
+	}
+
+	get := func(addr uint16) uint16 {
+		t.Helper()
+		v, err := server.server.GetHoldingRegister(1, addr)
+		if err != nil {
+			t.Fatalf("GetHoldingRegister(%d) error = %v", addr, err)
+		}
+		return v
+	}
+	get32 := func(addr uint16) uint32 { return uint32(get(addr))<<16 | uint32(get(addr+1)) }
+
+	// Reference values read from the productive emulator (old code, emu.yaml).
+	tests32 := []struct {
+		addr uint16
+		want int64
+	}{
+		{4096, 229100}, {4098, 232400}, {4100, 232200}, // mV
+		{4102, 571}, {4104, 413}, {4106, 571}, // mA
+		{4116, -1600},                      // W*100, signed
+		{4124, 66517754}, {4128, 16978668}, // Wh
+		{4140, 3900}, {4142, -3300}, {4144, -2200}, // W*100, signed
+	}
+	for _, tc := range tests32 {
+		got := int64(int32(get32(tc.addr)))
+		if got != tc.want {
+			t.Errorf("register %d = %d, want %d", tc.addr, got, tc.want)
+		}
+	}
+
+	if want := uint32(math.Round(229.1 * math.Sqrt(3) * 1000)); get32(4110) != want {
+		t.Errorf("register 4110 = %d, want %d", get32(4110), want)
+	}
+
+	tests16 := []struct {
+		addr uint16
+		want int16
+	}{
+		{4134, 500},                          // Hz*10
+		{4164, 82}, {4165, -92}, {4166, -99}, // PF*100
+		{18, 285}, {768, 117}, // identification
+	}
+	for _, tc := range tests16 {
+		if got := int16(get(tc.addr)); got != tc.want {
+			t.Errorf("register %d = %d, want %d", tc.addr, got, tc.want)
+		}
+	}
+
+	// SunSpec block: PF in percent with PF_SF -1 and end block after the meter model.
+	if got := int16(get(40103)); got != 820 {
+		t.Errorf("register 40103 (PFphA) = %d, want 820", got)
+	}
+	if got := int16(get(40106)); got != -1 {
+		t.Errorf("register 40106 (PF_SF) = %d, want -1", got)
+	}
+	if got := get(40176); got != 0xFFFF {
+		t.Errorf("register 40176 (end block ID) = %#x, want 0xffff", got)
+	}
+	if got := get(40177); got != 0 {
+		t.Errorf("register 40177 (end block L) = %d, want 0", got)
+	}
+}
