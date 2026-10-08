@@ -1,151 +1,111 @@
+// Package mbserver wraps github.com/womat/mbserver as a read-only Modbus server whose
+// holding registers can be updated while clients are reading them.
+//
+// The library answers requests in its own goroutine and reads the register memory
+// without locking. Here function code 3 is served under the server's read lock, and
+// callers update registers under the write lock (Lock/Unlock), so a client never sees
+// a 32-bit value whose high word is new and whose low word is old.
 package mbserver
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	modbusServer "github.com/womat/mbserver"
 )
 
-// Server is a Modbus server with allocated memory for discrete inputs, coils, etc.
+// writeFunctions are the Modbus write function codes, refused like a real meter does:
+// write single coil, write single register, write multiple coils, write multiple registers.
+var writeFunctions = []uint8{5, 6, 15, 16}
 
-type Request struct {
-	Register uint16
-	Quantity uint16
-	Done     chan bool
-}
-
-type Device struct {
-	Update chan Request
-}
-
+// Server is a read-only Modbus server with one register memory per unit ID.
+// Lock it while updating holding registers with SetHoldingRegister.
 type Server struct {
 	sync.RWMutex
 	handler *modbusServer.Server
-	timeout time.Duration
-	Devices map[uint8]Device
 }
 
-// NewServer creates a new Modbus server.
+// NewServer creates a new Modbus server. Unit ID 1 exists from the start.
 func NewServer() *Server {
-	// Allocate Modbus memory maps.
-	s := Server{
-		handler: modbusServer.NewServer(),
-		timeout: time.Second,
-		Devices: map[uint8]Device{},
-	}
+	s := &Server{handler: modbusServer.NewServer()}
 
-	// Device[1] will be created automatically when modbusServer.NewServer()
-	s.Devices[1] = Device{
-		Update: make(chan Request, 1),
+	s.handler.RegisterFunctionHandler(3, s.readHoldingRegisters)
+	for _, function := range writeFunctions {
+		s.handler.RegisterFunctionHandler(function, nil) // answered with IllegalFunction
 	}
-
-	return &s
+	return s
 }
 
-func (s *Server) SetTimeOut(t time.Duration) {
-	s.timeout = t
-}
-
+// ListenRTU serves requests arriving on a serial port.
 func (s *Server) ListenRTU(port io.ReadWriteCloser) error {
 	return s.handler.ListenRTU(port)
 }
 
-func (s *Server) ListenTCP(port string) error {
-	return s.handler.ListenTCP(port)
+// ListenTCP serves requests arriving on a TCP address, e.g. "0.0.0.0:502".
+func (s *Server) ListenTCP(address string) error {
+	return s.handler.ListenTCP(address)
 }
 
-// Close closes the server and closes the connect
+// Close stops the listeners.
 func (s *Server) Close() error {
 	s.handler.Close()
 	return nil
 }
 
-func (s *Server) NewDevice(id uint8) (err error) {
-	if err = s.handler.NewDevice(id); err != nil {
-		return
-	}
-
-	s.Devices[id] = Device{Update: make(chan Request)}
-	return
+// NewDevice adds a unit ID with its own register memory.
+func (s *Server) NewDevice(id uint8) error {
+	s.Lock()
+	defer s.Unlock()
+	return s.handler.NewDevice(id)
 }
 
-func (s *Server) RemoveDevice(id uint8) (err error) {
-	if err = s.handler.RemoveDevice(id); err != nil {
-		return
-	}
-	close(s.Devices[id].Update)
-	delete(s.Devices, id)
-	return
-}
-
+// SetHoldingRegister sets one holding register of unit ID id. The caller must hold the
+// write lock, so that a multi-register value is published as a whole.
 func (s *Server) SetHoldingRegister(id uint8, register, value uint16) error {
-	if _, ok := s.handler.Devices[id]; !ok {
-		return fmt.Errorf("deviceid %v doesn't exists", id)
+	device, ok := s.handler.Devices[id]
+	if !ok {
+		return fmt.Errorf("unit ID %d does not exist", id)
 	}
-
-	s.handler.Devices[id].HoldingRegisters[register] = value
+	device.HoldingRegisters[register] = value
 	return nil
 }
 
+// GetHoldingRegister returns one holding register of unit ID id.
 func (s *Server) GetHoldingRegister(id uint8, register uint16) (uint16, error) {
-	if _, ok := s.handler.Devices[id]; !ok {
-		return 0, fmt.Errorf("deviceid %v doesn't exists", id)
-	}
+	s.RLock()
+	defer s.RUnlock()
 
-	return s.handler.Devices[id].HoldingRegisters[register], nil
+	device, ok := s.handler.Devices[id]
+	if !ok {
+		return 0, fmt.Errorf("unit ID %d does not exist", id)
+	}
+	return device.HoldingRegisters[register], nil
 }
 
-func registerAddressAndNumber(frame modbusServer.Framer) (register int, numRegs int, endRegister int) {
+// readHoldingRegisters answers function code 3 under the read lock.
+func (s *Server) readHoldingRegisters(mb *modbusServer.Server, frame modbusServer.Framer) ([]byte, modbusServer.Exception) {
 	data := frame.GetData()
-	register = int(binary.BigEndian.Uint16(data[0:2]))
-	numRegs = int(binary.BigEndian.Uint16(data[2:4]))
-	endRegister = register + numRegs
-	return register, numRegs, endRegister
-}
-
-func (s *Server) SetRegisterFunctionHandler(function uint8) error {
-	var registerHandlerFunction func(*modbusServer.Server, modbusServer.Framer) ([]byte, modbusServer.Exception)
-
-	switch function {
-	case 3:
-		registerHandlerFunction = func(mb *modbusServer.Server, frame modbusServer.Framer) ([]byte, modbusServer.Exception) {
-			register, numRegs, endRegister := registerAddressAndNumber(frame)
-			device := frame.GetDevice()
-
-			if endRegister > 65536 {
-				warninglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v >> Exception: IllegalDataAddress, Register address: %v\n", device, register, numRegs, endRegister)
-				return []byte{}, modbusServer.IllegalDataAddress
-			}
-
-			debuglog.Printf("ReadHoldingRegisters from Device %v, Address %v, quantity %v\n", device, register, numRegs)
-
-			done := make(chan bool)
-			s.Devices[device].Update <- Request{Register: uint16(register), Quantity: uint16(numRegs), Done: done}
-
-			select {
-			case <-done:
-				debuglog.Printf("get done signal\n")
-			case <-time.After(s.timeout):
-				errorlog.Println("timeout during receive data")
-			}
-
-			s.RLock()
-			defer s.RUnlock()
-
-			r := append([]byte{byte(numRegs * 2)}, modbusServer.Uint16ToBytes(mb.Devices[device].HoldingRegisters[register:endRegister])...)
-			tracelog.Printf("response %v\n", hex.EncodeToString(r))
-			return r, modbusServer.Success
-		}
+	if len(data) < 4 {
+		return []byte{}, modbusServer.IllegalDataValue
+	}
+	register := int(binary.BigEndian.Uint16(data[0:2]))
+	quantity := int(binary.BigEndian.Uint16(data[2:4]))
+	if quantity < 1 || quantity > 125 {
+		return []byte{}, modbusServer.IllegalDataValue
+	}
+	end := register + quantity
+	if end > 65536 {
+		return []byte{}, modbusServer.IllegalDataAddress
 	}
 
-	if registerHandlerFunction == nil {
-		return fmt.Errorf("functioncode %v is not supported", function)
+	s.RLock()
+	defer s.RUnlock()
+
+	device, ok := mb.Devices[frame.GetDevice()]
+	if !ok {
+		return []byte{}, modbusServer.IllegalDataAddress
 	}
-	s.handler.RegisterFunctionHandler(function, registerHandlerFunction)
-	return nil
+	return append([]byte{byte(quantity * 2)}, modbusServer.Uint16ToBytes(device.HoldingRegisters[register:end])...), modbusServer.Success
 }
