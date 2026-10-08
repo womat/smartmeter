@@ -39,7 +39,7 @@ Eine stabile Zielseite, die nicht mehr von frei konfigurierbaren Server-Register
   - Name
   - Protokolltyp `tcp` oder `rtu`
   - Verbindungsparameter
-  - Slave-ID
+  - Unit-ID
   - Timeout
 - Pro Mapping definieren:
   - kanonisches Feld

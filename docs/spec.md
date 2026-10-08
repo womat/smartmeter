@@ -47,7 +47,7 @@ Pro Zaehler sollen mindestens folgende Angaben konfigurierbar sein:
 - Name
 - Typ der Quelle: TCP oder RTU
 - Verbindungsparameter
-- Slave-ID
+- Unit-ID
 - Timeout
 
 Pro Feld sollen mindestens folgende Angaben konfigurierbar sein:

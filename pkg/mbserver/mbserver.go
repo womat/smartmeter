@@ -11,7 +11,7 @@ import (
 	modbusServer "github.com/womat/mbserver"
 )
 
-// Server is a Modbus slave with allocated memory for discrete inputs, coils, etc.
+// Server is a Modbus server with allocated memory for discrete inputs, coils, etc.
 
 type Request struct {
 	Register uint16
@@ -30,7 +30,7 @@ type Server struct {
 	Devices map[uint8]Device
 }
 
-// NewServer creates a new Modbus server (slave).
+// NewServer creates a new Modbus server.
 func NewServer() *Server {
 	// Allocate Modbus memory maps.
 	s := Server{
