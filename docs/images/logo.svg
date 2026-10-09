@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="128" height="128">
+  <!-- smartmeter: a Ferraris meter with its counter, the disc in the slot and the type plate -->
+  <rect width="32" height="32" rx="7" fill="#2563a8"/>
+  <rect x="7.5" y="3.5" width="17" height="25" rx="3" fill="#f7f9fb"/>
+  <rect x="10" y="6.5" width="12" height="4.5" rx="1" fill="#1b232d"/>
+  <rect x="19" y="6.5" width="3" height="4.5" rx="1" fill="#e8231a"/>
+  <path d="M13 7.6v2.3M16 7.6v2.3" stroke="#f7f9fb" stroke-width=".9" stroke-linecap="round" opacity=".8"/>
+  <rect x="9.5" y="13.5" width="13" height="7" rx="2" fill="#1b232d"/>
+  <rect x="9.5" y="15.6" width="13" height="2.8" fill="#8a96a3"/>
+  <rect x="15" y="15.6" width="2.2" height="2.8" fill="#e8231a"/>
+  <path d="M11 24.5h10" stroke="#c9cfd6" stroke-width="1.4" stroke-linecap="round"/>
+</svg>

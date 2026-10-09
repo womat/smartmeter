@@ -203,6 +203,7 @@ header {
 .sign { display: inline-block; margin-right: .3em; }
 /* Thousands gap: a fifth of a character, a full space in a monospace font is too wide. */
 .ts { display: inline-block; width: .2em; }
+.scale .ts { width: .3em; }
 .import-c { color: var(--import); }
 .export-c { color: var(--export); }
 .bar { position: relative; height: 14px; border-radius: 7px; background: var(--track); }
@@ -211,9 +212,9 @@ header {
 .bar .fill.export { background: var(--export); border-radius: 7px 0 0 7px; }
 .bar .zero { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--fg); }
 .scale { position: relative; height: 16px; font-family: var(--font-num); font-size: 11px; color: var(--muted); }
-.scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-.scale span:first-child { transform: none; }
-.scale span:last-child { transform: translateX(-100%); }
+.scale > span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.scale > span:first-child { transform: none; }
+.scale > span:last-child { transform: translateX(-100%); }
 .scale-names { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 
 /* Phases */

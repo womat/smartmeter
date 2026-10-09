@@ -1,4 +1,4 @@
-# smartmeter – Deutsche Kurzfassung
+# <img src="docs/images/logo.svg" alt="" width="40" align="top"> smartmeter – Deutsche Kurzfassung
 
 🇬🇧 [Full documentation in English](README.md)
 
@@ -34,7 +34,9 @@ und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein 
    Quellzählers samt Registerzuordnung.
 4. **Anschließen:** RS485-Adapter an den Zählereingang des Wechselrichters (D+ an D+, D− an D−,
    Abschluss 120 Ω); im Wechselrichter einen Fronius Smart Meter auf Modbus RTU, Adresse 1,
-   9600 Baud einstellen.
+   9600 Baud einstellen. Am Raspberry Pi die UART `/dev/ttyS0` verwenden und
+   `interFrameDelay: 20ms` aus der Beispiel-Config übernehmen, sonst kommen einzelne Anfragen
+   zerteilt an.
 5. **Starten:** als systemd-Dienst, dann `https://<dein-pi>:8443/ready` prüfen oder die Web-Seite
    `https://<dein-pi>:8443/` öffnen.
 

@@ -1,4 +1,4 @@
-# smartmeter
+# <img src="docs/images/logo.svg" alt="" width="40" align="top"> smartmeter
 
 **Turn any Modbus energy meter into a Fronius Smart Meter — for the inverter on RS485 and for wallboxes on TCP.**
 
@@ -20,6 +20,13 @@ interface — smartmeter reads that device and **answers as a Fronius Smart Mete
 
 One upstream meter is polled once per interval and served on every unit ID and both transports at
 the same time, so all clients see the same values from the same moment.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/web-ui-dark.png">
+  <img src="docs/images/web-ui-light.png" alt="The smartmeter web page: energy flow from the source meter to the inverter and the TCP clients, 3 141 W export, the three phases, the energy counters and details" width="800">
+</picture>
+
+*The built-in [web page](#web-page) (sample values).*
 
 ---
 
@@ -136,6 +143,8 @@ To keep the API key out of the config file, write `apiKey: ${SMARTMETER_API_KEY}
 - Configure the inverter for a **Fronius Smart Meter** on Modbus RTU, address 1, 9600 baud, 8N1 —
   the defaults of a real meter and of `listen.rtu`.
 - Only one meter may answer on the bus at address 1: remove or readdress a real Fronius meter.
+- On a Raspberry Pi, use `/dev/ttyS0` (the UART on the GPIO header, enable it with `enable_uart=1`
+  and without a serial console) and keep `interFrameDelay: 20ms` from the example configuration.
 
 ---
 
@@ -227,9 +236,11 @@ listen:
     parity: N              # N | E | O
     stopBits: 1
     # Silence that ends a request (default: t3.5 of the Modbus specification, ~4ms at
-    # 9600 baud). Raise it, e.g. to 20ms-40ms, for USB adapters that split requests
-    # (CRC errors in the log).
-    # interFrameDelay: 20ms
+    # 9600 baud). Raise it when requests arrive split ("Error parsing RTU frame", CRC
+    # errors in the log): USB adapters need 20ms-40ms, and so does the UART of a
+    # Raspberry Pi (/dev/ttyS0), which split about one request per minute with the
+    # default and none with 20ms.
+    interFrameDelay: 20ms
 
 # =============================================================================
 # Emulated meters, keyed by name
@@ -614,7 +625,10 @@ sudo systemctl reload smartmeter       # requires ExecReload in the unit, see Qu
 Check `/ready` first. If it is ready, the problem is on the RS485 side: wiring (D+/D− swapped is
 the most common fault), termination, a second device answering on address 1, or the inverter not set
 to a Fronius Smart Meter on Modbus RTU. `Error parsing RTU frame` (CRC errors) in the log means
-requests arrive split, typical for USB adapters: set `listen.rtu.interFrameDelay`, e.g. to `20ms`.
+requests arrive split: set `listen.rtu.interFrameDelay`, e.g. to `20ms`. USB adapters need it, and
+so does the UART of a Raspberry Pi (`/dev/ttyS0`): with the default t3.5 (~4 ms at 9600 baud) about
+one request per minute arrived in two pieces, with `20ms` none. The inverter retries a lost request,
+so the meter keeps working, but the log fills with warnings.
 `--debug` logs every poll of the upstream meter.
 
 **`Serial port failed` in the log**
