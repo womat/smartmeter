@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	mb "github.com/simonvetter/modbus"
@@ -302,9 +303,8 @@ func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 	d.started = time.Now()
 	d.mu.Unlock()
 
-	if err := d.pollAndUpdate(writer); err != nil {
-		slog.Error("Initial Modbus poll failed", "meter", d.Config.Name, "error", err)
-	}
+	report := d.pollReporter()
+	report(d.pollAndUpdate(writer))
 
 	ticker := time.NewTicker(d.Config.Poll.Interval)
 	defer ticker.Stop()
@@ -314,10 +314,29 @@ func (d *compiledDevice) run(ctx context.Context, writer snapshotWriter) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := d.pollAndUpdate(writer); err != nil {
-				slog.Error("Modbus poll failed", "meter", d.Config.Name, "error", err)
-			}
+			report(d.pollAndUpdate(writer))
 			d.checkStale(writer, time.Now())
+		}
+	}
+}
+
+// pollReporter returns a function that logs the result of each poll: the first failure, then
+// one a minute while the source stays down, so an outage of hours does not fill the journal,
+// and the recovery. /health reports every failure regardless.
+func (d *compiledDevice) pollReporter() func(error) {
+	every := max(1, int(time.Minute/d.Config.Poll.Interval))
+	failures := 0
+	return func(err error) {
+		if err == nil {
+			if failures > 0 {
+				slog.Info("Source answers again", "meter", d.Config.Name, "failedPolls", failures)
+			}
+			failures = 0
+			return
+		}
+		failures++
+		if failures == 1 || failures%every == 0 {
+			slog.Error("Modbus poll failed", "meter", d.Config.Name, "failedPolls", failures, "error", err)
 		}
 	}
 }
@@ -806,8 +825,14 @@ func parseModbusParity(value string) (uint, error) {
 	}
 }
 
+// simonRegisterReader reads the upstream meter. After a failed read it closes the connection and
+// opens it again before the next read: a TCP connection the source dropped ("broken pipe") or a
+// late answer after a timeout would otherwise spoil every following read, and the meter would
+// stay stale until a restart.
 type simonRegisterReader struct {
 	client *mb.ModbusClient
+	reopen bool        // the last read failed: reconnect before the next one; used by the poll goroutine only
+	closed atomic.Bool // Close was called: never reconnect
 }
 
 func newTCPRegisterReader(source SourceConfig) (*simonRegisterReader, error) {
@@ -828,10 +853,33 @@ func newTCPRegisterReader(source SourceConfig) (*simonRegisterReader, error) {
 }
 
 func (r *simonRegisterReader) ReadHoldingRegisters(address, quantity uint16) ([]uint16, error) {
-	return r.client.ReadRegisters(address, quantity, mb.HOLDING_REGISTER)
+	if r.reopen {
+		if r.closed.Load() {
+			return nil, errors.New("source connection closed")
+		}
+		_ = r.client.Close()
+		if err := r.client.Open(); err != nil {
+			return nil, fmt.Errorf("reconnect: %w", err)
+		}
+		r.reopen = false
+		if r.closed.Load() { // Close came while reconnecting: do not leave the connection open
+			_ = r.client.Close()
+			return nil, errors.New("source connection closed")
+		}
+	}
+
+	values, err := r.client.ReadRegisters(address, quantity, mb.HOLDING_REGISTER)
+	if err != nil {
+		r.reopen = true
+	}
+	return values, err
 }
 
-func (r *simonRegisterReader) Close() error { return r.client.Close() }
+// Close closes the connection for good; a read in progress ends with the closed connection.
+func (r *simonRegisterReader) Close() error {
+	r.closed.Store(true)
+	return r.client.Close()
+}
 
 func newRTURegisterReader(source SourceConfig) (*simonRegisterReader, error) {
 	parity, err := parseModbusParity(source.RTU.Parity)

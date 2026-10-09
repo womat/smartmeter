@@ -404,6 +404,14 @@ function uptime(sec) {
   if (h) return `${h}h ${m}m`;
   return `${m}m`;
 }
+// How long an outage lasts: 47 s, 12 min, 5 h 32 min, 2 d 3 h.
+function span(sec) {
+  const s = Math.floor(sec), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d} d ${h} h`;
+  if (h) return `${h} h ${m} min`;
+  if (m) return `${m} min`;
+  return `${s} s`;
+}
 const seconds = s => s >= 1 && Number.isInteger(s) ? `${s} s` : `${+s.toFixed(3) * 1000} ms`;
 
 // Whole watts with a narrow thousands gap: 12<ts>730. Every power value (W, VA, var) in whole
@@ -439,7 +447,7 @@ function renderFlow(h, meters, names, rates) {
     const l = m.ready
       ? link("ok", `every ${seconds(m.pollIntervalSeconds)}` + (m.latencyMs != null ? ` · ${Math.round(m.latencyMs)} ms` : ""),
         `Polled every ${seconds(m.pollIntervalSeconds)}; the LED flashes per poll`, "src:" + n)
-      : link("crit", m.ageSeconds != null ? `no data for ${Math.floor(m.ageSeconds)} s` : "no data yet", m.lastError, "src:" + n);
+      : link("crit", m.ageSeconds != null ? `no data for ${span(m.ageSeconds)}` : "no data yet", m.lastError, "src:" + n);
     return `<div class="row"><div class="node"><span class="label">Source meter</span><h3>${esc(n)}</h3><span class="addr">${addr(parts)}</span></div>${l}</div>`;
   }).join("");
 
@@ -546,7 +554,7 @@ function renderDetails(m, v) {
 function renderMeter(name, m) {
   const v = m.values;
   const head = !m.ready && m.lastSuccess
-    ? `<span class="frozen-note">Frozen at ${time(m.lastSuccess)} · ${Math.floor(m.ageSeconds)} s old</span>`
+    ? `<span class="frozen-note">Frozen at ${time(m.lastSuccess)} · ${span(m.ageSeconds)} old</span>`
     : `<span class="units">unit IDs ${m.unitIDs.join(", ")} · source polled every ${seconds(m.pollIntervalSeconds)}</span>`;
   if (!v) {
     return `<section class="meter"><div class="meter-head"><h2>${esc(name)}</h2>${head}</div>
@@ -584,10 +592,10 @@ function bannerText(h, meters, names) {
     if (!m.lastSuccess) {
       texts.push(`No valid values from ${n} since start${why}. Its unit IDs do not answer yet.`);
     } else if (!m.online) {
-      texts.push(`No data from ${n} since ${time(m.lastSuccess)} (${Math.floor(m.ageSeconds)} s)${why}. Since ${time(m.offlineSince)} (stale timeout ${m.staleTimeoutSeconds} s) the inverter and the TCP clients get no answer, so the inverter sees a meter failure. The values below are the last valid ones.`);
+      texts.push(`No data from ${n} since ${time(m.lastSuccess)} (${span(m.ageSeconds)})${why}. Since ${time(m.offlineSince)} (stale timeout ${m.staleTimeoutSeconds} s) the inverter and the TCP clients get no answer, so the inverter sees a meter failure. The values below are the last valid ones.`);
     } else {
       const then = m.staleTimeoutSeconds ? ` After ${m.staleTimeoutSeconds} s without data the unit IDs stop answering.` : "";
-      texts.push(`No data from ${n} since ${time(m.lastSuccess)} (${Math.floor(m.ageSeconds)} s)${why}. The inverter and the TCP clients still read the frozen values below.${then}`);
+      texts.push(`No data from ${n} since ${time(m.lastSuccess)} (${span(m.ageSeconds)})${why}. The inverter and the TCP clients still read the frozen values below.${then}`);
     }
   }
   for (const port of h.rtu || []) {

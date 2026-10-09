@@ -2,9 +2,11 @@ package meters
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,13 +16,19 @@ import (
 // startFakeSmartfox serves the given registers on unit ID 1 over Modbus TCP, as upstream meter.
 func startFakeSmartfox(t *testing.T, registers map[uint16]uint16) (port int, server *mbserver.Server) {
 	t.Helper()
+	port = freePort(t)
+	return port, startFakeSmartfoxOn(t, port, registers)
+}
+
+// startFakeSmartfoxOn is startFakeSmartfox on a given port, e.g. to restart the source.
+func startFakeSmartfoxOn(t *testing.T, port int, registers map[uint16]uint16) (server *mbserver.Server) {
+	t.Helper()
 	server = mbserver.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); server.Close() })
 	if err := server.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	port = freePort(t)
 	if err := server.ListenTCP(ctx, "127.0.0.1:"+strconv.Itoa(port)); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +37,7 @@ func startFakeSmartfox(t *testing.T, registers map[uint16]uint16) (port int, ser
 			t.Fatal(err)
 		}
 	}
-	return port, server
+	return server
 }
 
 func smartfoxMeter(port int) MeterConfig {
@@ -112,6 +120,76 @@ func TestPollingEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitUntil("the new voltage", func() bool { return read32(1, 4096) == 235000 })
+}
+
+// TestPollingReconnectsAfterSourceDropsConnection: the source closes the connection (on
+// primary-meter the Smartfox did, "write: broken pipe" for hours) and is back a moment later.
+// smartmeter must reconnect on its own and serve the new values, without a restart.
+func TestPollingReconnectsAfterSourceDropsConnection(t *testing.T) {
+	registers := map[uint16]uint16{41017: 0, 41018: 100, 41025: 2300, 41037: 5000}
+	port, upstream := startFakeSmartfox(t, registers)
+	meters := map[string]MeterConfig{"primary_meter": smartfoxMeter(port)}
+
+	server, err := NewModbusServerService(meters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	client, err := NewModbusService(meters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Start(context.Background(), server); err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	power := func() int32 {
+		regs, err := server.server.HoldingRegisters(1, 4116, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return int32(uint32(regs[0])<<16 | uint32(regs[1]))
+	}
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFor("the first snapshot", func() bool { return power() == 10000 })
+
+	upstream.Close() // drops the connection smartmeter holds
+	waitFor("a failed poll", func() bool { return client.Status(time.Now())["primary_meter"].LastError != "" })
+
+	registers[41018] = 250
+	startFakeSmartfoxOn(t, port, registers)
+	waitFor("the values of the restarted source", func() bool { return power() == 25000 })
+}
+
+func TestPollReporterThrottles(t *testing.T) {
+	var buf strings.Builder
+	defaultLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(defaultLogger)
+
+	d := &compiledDevice{Config: MeterConfig{Name: "m", Poll: PollConfig{Interval: time.Second}}}
+	report := d.pollReporter()
+	for range 125 { // two minutes and five seconds without the source
+		report(errors.New("broken pipe"))
+	}
+	report(nil)
+
+	if got := strings.Count(buf.String(), "Modbus poll failed"); got != 3 {
+		t.Errorf("logged %d failures in 125 polls, want 3 (the first, after 60 and 120)", got)
+	}
+	if !strings.Contains(buf.String(), "Source answers again") || !strings.Contains(buf.String(), "failedPolls=125") {
+		t.Errorf("log = %s, want the recovery with failedPolls=125", buf.String())
+	}
 }
 
 func TestStartFailsWhenUpstreamIsUnreachable(t *testing.T) {
