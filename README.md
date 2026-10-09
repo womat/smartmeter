@@ -222,15 +222,15 @@ webserver:
 # Modbus server (facing the inverter and other clients)
 # =============================================================================
 # TCP and RTU can be active at the same time; both serve every unit ID of every meter.
+# A listener is active when its block is present: delete or comment out a block to turn it
+# off. Defaults: tcp 0.0.0.0:502, rtu 9600 8N1 (port is required).
 listen:
   tcp:
-    enabled: true
     host: 0.0.0.0
     port: 502
 
   # RS485 to the Fronius inverter (the inverter polls unit ID 1 at 9600 8N1)
   rtu:
-    enabled: true
     port: /dev/ttyS0
     baudRate: 9600
     dataBits: 8
@@ -246,7 +246,7 @@ listen:
 # =============================================================================
 # Emulated meters, keyed by name
 # =============================================================================
-# unitIDs      - Unit IDs the meter answers on (1-247, unique across all meters).
+# unitIds      - Unit IDs the meter answers on (1-247, unique across all meters).
 #                All IDs serve the same values. Fronius convention:
 #                1 = inverter via RS485, 200 = SunSpec meter via TCP.
 # maxCurrent   - Rated current per phase in A (Fronius Smart Meter 63A-3: 63).
@@ -268,7 +268,7 @@ listen:
 #
 # source       - Upstream meter
 #   type       - tcp | rtu
-#   unitID     - Unit ID of the upstream meter
+#   unitId     - Unit ID of the upstream meter
 #   timeout    - Request timeout as Go duration string (default 2s)
 #   tcp        - host, port (default 502)
 #   rtu        - port, baudRate, dataBits, parity, stopBits (default 9600 8N1)
@@ -297,7 +297,7 @@ meter:
   # Register list (1-based in the document, 0-based here):
   # https://smartfox.at/wp-content/uploads/2022/12/Modbus-Register-SMARTFOX-Pro-SMARTFOX-Pro-2-v22e-00.01.03.10.xlsx
   primary_meter:
-    unitIDs: [ 1, 200 ]
+    unitIds: [ 1, 200 ]
     maxCurrent: 63
     staleTimeout: 30s
     limits:
@@ -307,7 +307,7 @@ meter:
 
     source:
       type: tcp
-      unitID: 1
+      unitId: 1
       timeout: 300ms
       tcp:
         host: smartfox.local
@@ -413,9 +413,9 @@ meter:
 
 ### Unit IDs
 
-Every meter answers on all of its `unitIDs`, on TCP and RTU. The values are the same; only the
+Every meter answers on all of its `unitIds`, on TCP and RTU. The values are the same; only the
 SunSpec Modbus address (register 40068) reports the unit ID that was asked. Fronius uses unit ID 1
-on RS485 (inverter) and 200 for the meter over TCP, so `unitIDs: [1, 200]` serves both.
+on RS485 (inverter) and 200 for the meter over TCP, so `unitIds: [1, 200]` serves both.
 
 ### Spike filter
 
@@ -522,7 +522,7 @@ listeners with the requests they answered since start:
 ```json
 "meters": {
   "primary_meter": {
-    "unitIDs": [1, 200],
+    "unitIds": [1, 200],
     "source": "tcp 192.168.1.10:502 unit 1",
     "ready": true,
     "online": true,
@@ -652,8 +652,9 @@ smartmeter keeps reconnecting on its own (see [Source failure](#source-failure))
 
 **Service is `dead` immediately after start**
 A configuration error: the reason is printed on stdout. `Failed to load config file` names a key
-that does not exist (often a renamed one, e.g. `devices` → `meter`, `unitIds` → `unitIDs`) or a
-duration without unit; `config validation failed` names the invalid value. `bind: permission denied`
+that does not exist (often a renamed one, e.g. `devices` → `meter`; keys renamed or removed in
+3.0.0 come with the fix, see [Upgrading to 3.0.0](#upgrading-to-300)) or a duration without unit;
+`config validation failed` names the invalid value. `bind: permission denied`
 for port 502 means `AmbientCapabilities=CAP_NET_BIND_SERVICE` is missing in the unit.
 
 ---
@@ -669,6 +670,19 @@ a breaking change of the API or the configuration raises the major version.
 like `2.0.0-3-g0c13781-dirty` instead.
 
 Building from source needs Go and `make`: clone the repository and run `make help` for the targets.
+
+### Upgrading to 3.0.0
+
+3.0.0 changes the configuration and the JSON of `/health` and `/registers`:
+
+| 2.x                                    | 3.0.0                                              |
+|----------------------------------------|----------------------------------------------------|
+| `meter.<name>.unitIDs`                 | `unitIds`                                          |
+| `meter.<name>.source.unitID`           | `unitId`                                           |
+| `listen.tcp.enabled`, `listen.rtu.enabled` | removed: a present block is active; delete or comment out the block to turn a listener off |
+| JSON `unitIDs` (`/health`), `unitID` (`/registers`) | `unitIds`, `unitId`                   |
+
+An old configuration file is refused with a message that names the new key.
 
 ---
 

@@ -52,20 +52,6 @@ func NewConfig() *Config {
 			BlockedIPs: []string{},
 			AllowedIPs: []string{},
 		},
-		Listen: meters.ListenConfig{
-			TCP: meters.ListenTCPConfig{
-				Host: "0.0.0.0",
-				Port: 502,
-			},
-			RTU: meters.ListenRTUConfig{
-				SerialConfig: meters.SerialConfig{
-					BaudRate: 9600,
-					DataBits: 8,
-					Parity:   "N",
-					StopBits: 1,
-				},
-			},
-		},
 		Meter: make(map[string]meters.MeterConfig),
 	}
 }
@@ -105,10 +91,34 @@ func LoadConfig(fileName string) (*Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader([]byte(expandEnvBraces(string(content)))))
 	dec.KnownFields(true)
 	if err = dec.Decode(cfg); err != nil && !errors.Is(err, io.EOF) {
-		return cfg, fmt.Errorf("failed to unmarshal config: %w", err)
+		return cfg, fmt.Errorf("failed to unmarshal config: %w%s", err, renamedKeyHint(err))
 	}
 
 	return cfg, nil
+}
+
+// renamedKeys explains keys of earlier releases, so an old config file fails with the fix
+// instead of only "field ... not found".
+var renamedKeys = map[string]string{
+	"unitIDs": "renamed to unitIds",
+	"unitID":  "renamed to unitId",
+	"enabled": "removed from listen.tcp and listen.rtu: a listener is active when its block is present; delete or comment out the block to turn it off",
+}
+
+// unknownField matches the key in yaml.v3's "field X not found in type Y".
+var unknownField = regexp.MustCompile(`field (\w+) not found`)
+
+// renamedKeyHint returns "; <key>: <hint>" for every renamed key that err complains about.
+func renamedKeyHint(err error) string {
+	var hint strings.Builder
+	seen := map[string]bool{}
+	for _, m := range unknownField.FindAllStringSubmatch(err.Error(), -1) {
+		if text, ok := renamedKeys[m[1]]; ok && !seen[m[1]] {
+			seen[m[1]] = true
+			fmt.Fprintf(&hint, "; %s: %s", m[1], text)
+		}
+	}
+	return hint.String()
 }
 
 // Validate checks the Config for invalid or missing values and applies the per-meter defaults.
@@ -131,10 +141,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid port: %d", c.Webserver.ListenPort)
 	}
 
-	if c.Listen.TCP.Enabled && (c.Listen.TCP.Port < 1 || c.Listen.TCP.Port > 65535) {
+	c.Listen.ApplyDefaults()
+	if c.Listen.TCP != nil && (c.Listen.TCP.Port < 1 || c.Listen.TCP.Port > 65535) {
 		return fmt.Errorf("invalid listen.tcp.port: %d", c.Listen.TCP.Port)
 	}
-	if c.Listen.RTU.Enabled {
+	if c.Listen.RTU != nil {
 		if err := c.Listen.RTU.SerialConfig.Validate(); err != nil {
 			return fmt.Errorf("invalid listen.rtu: %w", err)
 		}
@@ -150,7 +161,7 @@ func (c *Config) Validate() error {
 		c.Meter[name] = meter
 	}
 
-	return meters.CheckUniqueUnitIDs(c.Meter)
+	return meters.CheckUniqueUnitIds(c.Meter)
 }
 
 // minApiKeyLength is the length below which Warnings flags the API key as weak.

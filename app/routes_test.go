@@ -69,15 +69,15 @@ func TestReadyAndHealthReportMeterState(t *testing.T) {
 	}
 
 	rec = serve(app, "/health", "test-key")
-	if !strings.Contains(rec.Body.String(), `"unitIDs":[1,200]`) {
-		t.Errorf("GET /health body = %s, want unitIDs as a JSON array of numbers", rec.Body)
+	if !strings.Contains(rec.Body.String(), `"unitIds":[1,200]`) {
+		t.Errorf("GET /health body = %s, want unitIds as a JSON array of numbers", rec.Body)
 	}
 	var got health.Model
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("GET /health body = %s: %v", rec.Body, err)
 	}
 	st, ok := got.Meters["primary_meter"]
-	if !ok || st.Ready || len(st.UnitIDs) != 2 {
+	if !ok || st.Ready || len(st.UnitIds) != 2 {
 		t.Errorf("GET /health meters = %+v, want primary_meter not ready on 2 unit IDs", got.Meters)
 	}
 }
@@ -134,8 +134,8 @@ func TestRegistersRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Silent until the first snapshot, as NewModbusServerService leaves it.
-	if dump.UnitID != 200 || dump.Online || len(dump.Proprietary) == 0 || len(dump.SunSpec) == 0 {
-		t.Errorf("GET /registers?unit=200 = unit %d online %v, %d/%d rows", dump.UnitID, dump.Online, len(dump.Proprietary), len(dump.SunSpec))
+	if dump.UnitId != 200 || dump.Online || len(dump.Proprietary) == 0 || len(dump.SunSpec) == 0 {
+		t.Errorf("GET /registers?unit=200 = unit %d online %v, %d/%d rows", dump.UnitId, dump.Online, len(dump.Proprietary), len(dump.SunSpec))
 	}
 }
 

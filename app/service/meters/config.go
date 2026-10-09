@@ -11,23 +11,36 @@ import (
 	"time"
 )
 
-// ListenConfig configures the Modbus server. TCP and RTU can be active at the same time
-// and serve the same unit IDs.
+// ListenConfig configures the Modbus server. A listener is active when its block is present
+// (nil = off); TCP and RTU can be active at the same time and serve the same unit IDs.
 type ListenConfig struct {
-	TCP ListenTCPConfig `yaml:"tcp"`
-	RTU ListenRTUConfig `yaml:"rtu"`
+	TCP *ListenTCPConfig `yaml:"tcp"`
+	RTU *ListenRTUConfig `yaml:"rtu"`
+}
+
+// ApplyDefaults fills the unset fields of the present listeners: TCP 0.0.0.0:502, RTU 9600 8N1.
+func (l *ListenConfig) ApplyDefaults() {
+	if l.TCP != nil {
+		if l.TCP.Host == "" {
+			l.TCP.Host = "0.0.0.0"
+		}
+		if l.TCP.Port == 0 {
+			l.TCP.Port = 502
+		}
+	}
+	if l.RTU != nil {
+		l.RTU.applyDefaults()
+	}
 }
 
 // ListenTCPConfig configures the Modbus TCP server.
 type ListenTCPConfig struct {
-	Enabled bool   `yaml:"enabled"` // Start the Modbus TCP server
-	Host    string `yaml:"host"`    // Listen address (0.0.0.0 = all interfaces)
-	Port    int    `yaml:"port"`    // Listen port
+	Host string `yaml:"host"` // Listen address (0.0.0.0 = all interfaces)
+	Port int    `yaml:"port"` // Listen port
 }
 
 // ListenRTUConfig configures the Modbus RTU server on a serial port.
 type ListenRTUConfig struct {
-	Enabled      bool `yaml:"enabled"` // Start the Modbus RTU server
 	SerialConfig `yaml:",inline"`
 
 	// InterFrameDelay is the silence that ends a request; 0 = t3.5 of the Modbus specification
@@ -44,11 +57,27 @@ type SerialConfig struct {
 	StopBits int    `yaml:"stopBits"` // Stop bits: 1 | 2
 }
 
+// applyDefaults fills the unset line settings with 9600 8N1.
+func (c *SerialConfig) applyDefaults() {
+	if c.BaudRate == 0 {
+		c.BaudRate = 9600
+	}
+	if c.DataBits == 0 {
+		c.DataBits = 8
+	}
+	if c.Parity == "" {
+		c.Parity = "N"
+	}
+	if c.StopBits == 0 {
+		c.StopBits = 1
+	}
+}
+
 // MeterConfig describes one emulated meter: where its values come from and on which
 // unit IDs it answers.
 type MeterConfig struct {
 	Name       string                   `yaml:"-"`          // Key in the meter map, set by Validate
-	UnitIDs    []uint8                  `yaml:"unitIDs"`    // Unit IDs the emulated meter answers on
+	UnitIds    []uint8                  `yaml:"unitIds"`    // Unit IDs the emulated meter answers on
 	MaxCurrent float64                  `yaml:"maxCurrent"` // Rated current per phase in A, 0 = no plausibility check
 	Limits     LimitsConfig             `yaml:"limits"`     // Limits of the installation, for the web page
 	Source     SourceConfig             `yaml:"source"`     // Upstream meter
@@ -83,7 +112,7 @@ func (m MeterConfig) Stale() time.Duration {
 // SourceConfig describes the connection to the upstream meter.
 type SourceConfig struct {
 	Type    string          `yaml:"type"`    // tcp | rtu
-	UnitID  uint8           `yaml:"unitID"`  // Unit ID of the upstream meter
+	UnitId  uint8           `yaml:"unitId"`  // Unit ID of the upstream meter
 	Timeout time.Duration   `yaml:"timeout"` // Request timeout as Go duration string (e.g. 300ms)
 	TCP     TCPSourceConfig `yaml:"tcp"`     // Used with type tcp
 	RTU     SerialConfig    `yaml:"rtu"`     // Used with type rtu
@@ -93,9 +122,9 @@ type SourceConfig struct {
 func (s SourceConfig) String() string {
 	switch strings.ToLower(s.Type) {
 	case "tcp":
-		return fmt.Sprintf("tcp %s unit %d", net.JoinHostPort(s.TCP.Host, strconv.Itoa(s.TCP.Port)), s.UnitID)
+		return fmt.Sprintf("tcp %s unit %d", net.JoinHostPort(s.TCP.Host, strconv.Itoa(s.TCP.Port)), s.UnitId)
 	case "rtu":
-		return fmt.Sprintf("rtu %s unit %d", s.RTU.Port, s.UnitID)
+		return fmt.Sprintf("rtu %s unit %d", s.RTU.Port, s.UnitId)
 	default:
 		return s.Type
 	}
@@ -138,13 +167,13 @@ func Names(meters map[string]MeterConfig) []string {
 	return names
 }
 
-// CheckUniqueUnitIDs ensures that every unit ID is served by exactly one meter.
-func CheckUniqueUnitIDs(meters map[string]MeterConfig) error {
+// CheckUniqueUnitIds ensures that every unit ID is served by exactly one meter.
+func CheckUniqueUnitIds(meters map[string]MeterConfig) error {
 	owner := make(map[uint8]string)
 	for _, name := range Names(meters) {
-		for _, id := range meters[name].UnitIDs {
+		for _, id := range meters[name].UnitIds {
 			if other, exists := owner[id]; exists {
-				return fmt.Errorf("unitID %d is used by meter %q and meter %q", id, other, name)
+				return fmt.Errorf("unitId %d is used by meter %q and meter %q", id, other, name)
 			}
 			owner[id] = name
 		}
@@ -186,18 +215,7 @@ func (m *MeterConfig) ApplyDefaults() {
 			m.Source.TCP.Port = 502
 		}
 	case "rtu":
-		if m.Source.RTU.BaudRate == 0 {
-			m.Source.RTU.BaudRate = 9600
-		}
-		if m.Source.RTU.DataBits == 0 {
-			m.Source.RTU.DataBits = 8
-		}
-		if m.Source.RTU.Parity == "" {
-			m.Source.RTU.Parity = "N"
-		}
-		if m.Source.RTU.StopBits == 0 {
-			m.Source.RTU.StopBits = 1
-		}
+		m.Source.RTU.applyDefaults()
 	}
 
 	for field, mapping := range m.Map {
@@ -213,12 +231,12 @@ func (m *MeterConfig) ApplyDefaults() {
 
 // Validate checks the meter for invalid or missing values.
 func (m MeterConfig) Validate() error {
-	if len(m.UnitIDs) == 0 {
-		return errors.New("unitIDs requires at least one entry")
+	if len(m.UnitIds) == 0 {
+		return errors.New("unitIds requires at least one entry")
 	}
-	for _, id := range m.UnitIDs {
+	for _, id := range m.UnitIds {
 		if id == 0 || id > 247 {
-			return fmt.Errorf("invalid unitID %d, must be 1-247", id)
+			return fmt.Errorf("invalid unitId %d, must be 1-247", id)
 		}
 	}
 	if m.MaxCurrent < 0 {
@@ -230,8 +248,8 @@ func (m MeterConfig) Validate() error {
 	if m.StaleTimeout != nil && *m.StaleTimeout < 0 {
 		return fmt.Errorf("invalid staleTimeout %s", *m.StaleTimeout)
 	}
-	if m.Source.UnitID == 0 || m.Source.UnitID > 247 {
-		return fmt.Errorf("invalid source.unitID %d, must be 1-247", m.Source.UnitID)
+	if m.Source.UnitId == 0 || m.Source.UnitId > 247 {
+		return fmt.Errorf("invalid source.unitId %d, must be 1-247", m.Source.UnitId)
 	}
 	if m.Source.Timeout <= 0 {
 		return fmt.Errorf("invalid source.timeout %s", m.Source.Timeout)

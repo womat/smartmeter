@@ -123,7 +123,7 @@ definitions:
       staleTimeoutSeconds:
         description: 0 = the unit IDs never go silent
         type: number
-      unitIDs:
+      unitIds:
         description: 'Unit IDs the meter answers on (int: []uint8 would be base64
           in JSON)'
         items:
@@ -164,7 +164,7 @@ definitions:
         items:
           $ref: '#/definitions/meters.RegisterRow'
         type: array
-      unitID:
+      unitId:
         type: integer
     type: object
   meters.RegisterRow:

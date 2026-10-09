@@ -48,10 +48,10 @@ func testAppConfig(t *testing.T, modbusPort, webPort int) *Config {
 	cfg.Webserver.ListenHost = "127.0.0.1"
 	cfg.Webserver.ListenPort = webPort
 	cfg.Webserver.CertFile = "/nonexistent/cert.pem" // embedded dev certificate (env dev)
-	cfg.Listen.TCP = meters.ListenTCPConfig{Enabled: true, Host: "127.0.0.1", Port: modbusPort}
+	cfg.Listen.TCP = &meters.ListenTCPConfig{Host: "127.0.0.1", Port: modbusPort}
 	cfg.Meter = map[string]meters.MeterConfig{"m": {
-		UnitIDs: []uint8{1},
-		Source:  meters.SourceConfig{Type: "tcp", UnitID: 1, TCP: meters.TCPSourceConfig{Host: "127.0.0.1", Port: upstreamPort}},
+		UnitIds: []uint8{1},
+		Source:  meters.SourceConfig{Type: "tcp", UnitId: 1, TCP: meters.TCPSourceConfig{Host: "127.0.0.1", Port: upstreamPort}},
 		Poll:    meters.PollConfig{Interval: 50 * time.Millisecond},
 		Map:     map[string]meters.MappingConfig{"frequency": {Type: "register", Address: 0, DType: "uint16", Scale: -2}},
 	}}

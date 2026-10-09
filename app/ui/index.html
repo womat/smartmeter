@@ -451,7 +451,7 @@ function renderFlow(h, meters, names, rates) {
     return `<div class="row"><div class="node"><span class="label">Source meter</span><h3>${esc(n)}</h3><span class="addr">${addr(parts)}</span></div>${l}</div>`;
   }).join("");
 
-  const ids = names.flatMap(n => meters[n].unitIDs);
+  const ids = names.flatMap(n => meters[n].unitIds);
   const mute = led => link("crit", "not answering", "No valid values from the source: the unit IDs do not answer", led);
   const targets = [];
   const rtu = h.modbus.rtu;
@@ -473,7 +473,7 @@ function renderFlow(h, meters, names, rates) {
   $("flow").innerHTML = `
     <div class="fan in">${sources}</div>
     <div class="node hub"><span class="label">Serves as</span><h3>smart<b>meter</b></h3><span class="addr">${addr(["Fronius 63A-3", "units " + ids.join(", ")])}</span></div>
-    <div class="fan out">${targets.join("") || `<p class="waiting">No Modbus listener enabled.</p>`}</div>`;
+    <div class="fan out">${targets.join("") || `<p class="waiting">No Modbus listener configured.</p>`}</div>`;
 }
 
 // Square-root scale from the export limit (left) to the import limit (right), so 50 W stays visible.
@@ -555,7 +555,7 @@ function renderMeter(name, m) {
   const v = m.values;
   const head = !m.ready && m.lastSuccess
     ? `<span class="frozen-note">Frozen at ${time(m.lastSuccess)} · ${span(m.ageSeconds)} old</span>`
-    : `<span class="units">unit IDs ${m.unitIDs.join(", ")} · source polled every ${seconds(m.pollIntervalSeconds)}</span>`;
+    : `<span class="units">unit IDs ${m.unitIds.join(", ")} · source polled every ${seconds(m.pollIntervalSeconds)}</span>`;
   if (!v) {
     return `<section class="meter"><div class="meter-head"><h2>${esc(name)}</h2>${head}</div>
       <p class="panel waiting">Waiting for the first valid values from the source. Until then the unit IDs do not answer.</p></section>`;
@@ -640,7 +640,7 @@ function render(h) {
   $("banner").hidden = !text;
   $("content").classList.remove("stale");
 
-  const ids = names.flatMap(n => meters[n].unitIDs);
+  const ids = names.flatMap(n => meters[n].unitIds);
   if (!ids.includes(unit)) unit = ids[0] ?? null;
   $("unitsel").innerHTML = ids.map(u => `<button type="button" data-unit="${u}" aria-pressed="${u === unit}">${u}</button>`).join("");
 
@@ -681,7 +681,7 @@ async function pollRegisters() {
   if (!$("regs").open || unit === null) return;
   try {
     const d = await get(`registers?unit=${unit}`);
-    $("regtables").innerHTML = (d.online ? "" : `<p class="waiting">Unit ID ${d.unitID} does not answer right now; these are the registers it keeps.</p>`) +
+    $("regtables").innerHTML = (d.online ? "" : `<p class="waiting">Unit ID ${d.unitId} does not answer right now; these are the registers it keeps.</p>`) +
       table("Proprietary <span>· Fronius RS485 map, recorded 2020 · polled by the inverter</span>", d.proprietary) +
       table("SunSpec <span>· models 1 and 203 · read by wallboxes and evcc</span>", d.sunspec);
   } catch (e) {

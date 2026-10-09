@@ -46,9 +46,9 @@ func smartfoxMeter(port int) MeterConfig {
 	}
 	m := MeterConfig{
 		Name:       "primary_meter",
-		UnitIDs:    []uint8{1, 200},
+		UnitIds:    []uint8{1, 200},
 		MaxCurrent: 63,
-		Source:     SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: port}},
+		Source:     SourceConfig{Type: "tcp", UnitId: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: port}},
 		Poll:       PollConfig{Interval: 50 * time.Millisecond, MaxBlockGap: 10, MaxBlockSize: 125},
 		Map: map[string]MappingConfig{
 			"energy_import": reg(40999, "uint64", 0),

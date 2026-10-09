@@ -8,8 +8,8 @@ import (
 
 func validMeter() MeterConfig {
 	return MeterConfig{
-		UnitIDs: []uint8{1},
-		Source:  SourceConfig{Type: "tcp", UnitID: 1, TCP: TCPSourceConfig{Host: "smartfox.local"}},
+		UnitIds: []uint8{1},
+		Source:  SourceConfig{Type: "tcp", UnitId: 1, TCP: TCPSourceConfig{Host: "smartfox.local"}},
 		Map:     map[string]MappingConfig{"power_total": {Type: "register", Address: 41017, DType: "int32"}},
 	}
 }
@@ -36,7 +36,7 @@ func TestMeterDefaults(t *testing.T) {
 
 func TestMeterValidate(t *testing.T) {
 	for want, change := range map[string]func(*MeterConfig){
-		"invalid source.unitID":     func(m *MeterConfig) { m.Source.UnitID = 0 },
+		"invalid source.unitId":     func(m *MeterConfig) { m.Source.UnitId = 0 },
 		"invalid source.timeout":    func(m *MeterConfig) { m.Source.Timeout = -time.Second },
 		"invalid poll.interval":     func(m *MeterConfig) { m.Poll.Interval = -time.Second },
 		"invalid poll.maxBlockGap":  func(m *MeterConfig) { m.Poll.MaxBlockGap = -1 },

@@ -329,7 +329,7 @@ const docTemplate = `{
                     "description": "0 = the unit IDs never go silent",
                     "type": "number"
                 },
-                "unitIDs": {
+                "unitIds": {
                     "description": "Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)",
                     "type": "array",
                     "items": {
@@ -384,7 +384,7 @@ const docTemplate = `{
                         "$ref": "#/definitions/meters.RegisterRow"
                     }
                 },
-                "unitID": {
+                "unitId": {
                     "type": "integer"
                 }
             }

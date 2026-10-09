@@ -39,11 +39,11 @@ func startTestServer(t *testing.T, port int) *ModbusServerService {
 // it: both silent until the first valid snapshot.
 func startSilentTestServer(t *testing.T, port int) *ModbusServerService {
 	t.Helper()
-	s, err := NewModbusServerService(map[string]MeterConfig{"m": {UnitIDs: []uint8{1, 200}}})
+	s, err := NewModbusServerService(map[string]MeterConfig{"m": {UnitIds: []uint8{1, 200}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Start(ListenConfig{TCP: ListenTCPConfig{Enabled: true, Host: "127.0.0.1", Port: port}}); err != nil {
+	if err = s.Start(ListenConfig{TCP: &ListenTCPConfig{Host: "127.0.0.1", Port: port}}); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -92,7 +92,7 @@ func TestActivity(t *testing.T) {
 	}
 }
 
-func dial(t *testing.T, port int, unitID uint8) *mb.ModbusClient {
+func dial(t *testing.T, port int, unitId uint8) *mb.ModbusClient {
 	t.Helper()
 	c, err := mb.NewClient(&mb.ClientConfiguration{URL: "tcp://127.0.0.1:" + strconv.Itoa(port), Timeout: time.Second})
 	if err != nil {
@@ -101,12 +101,12 @@ func dial(t *testing.T, port int, unitID uint8) *mb.ModbusClient {
 	if err = c.Open(); err != nil {
 		t.Fatal(err)
 	}
-	_ = c.SetUnitId(unitID)
+	_ = c.SetUnitId(unitId)
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
 
-func TestServerServesUnitIDsReadOnly(t *testing.T) {
+func TestServerServesUnitIdsReadOnly(t *testing.T) {
 	port := freePort(t)
 	s := startTestServer(t, port)
 	defer s.Close()
@@ -178,12 +178,12 @@ func TestSerialReady(t *testing.T) {
 }
 
 func TestStartReportsMissingSerialPort(t *testing.T) {
-	s, err := NewModbusServerService(map[string]MeterConfig{"m": {UnitIDs: []uint8{1}}})
+	s, err := NewModbusServerService(map[string]MeterConfig{"m": {UnitIds: []uint8{1}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	rtu := ListenRTUConfig{Enabled: true, SerialConfig: SerialConfig{Port: "/dev/does-not-exist", BaudRate: 9600, DataBits: 8, Parity: "N", StopBits: 1}}
+	rtu := &ListenRTUConfig{SerialConfig: SerialConfig{Port: "/dev/does-not-exist", BaudRate: 9600, DataBits: 8, Parity: "N", StopBits: 1}}
 	if err = s.Start(ListenConfig{RTU: rtu}); err == nil {
 		t.Error("Start succeeded with a missing serial port")
 	}

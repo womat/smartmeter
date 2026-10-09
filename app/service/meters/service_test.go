@@ -53,10 +53,10 @@ func TestBuildReadBlocks(t *testing.T) {
 func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 	device, err := compileDevice(MeterConfig{
 		Name:    "main_meter",
-		UnitIDs: []uint8{200},
+		UnitIds: []uint8{200},
 		Source: SourceConfig{
 			Type:    "tcp",
-			UnitID:  1,
+			UnitId:  1,
 			Timeout: 2 * time.Second,
 			TCP: TCPSourceConfig{
 				Host: "127.0.0.1",
@@ -112,7 +112,7 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 
 	server := newTestServer()
 	defer server.Close()
-	if err := server.server.NewDevice(200); err != nil {
+	if err := server.server.NewUnit(200); err != nil {
 		t.Fatalf("NewDevice() error = %v", err)
 	}
 
@@ -161,8 +161,8 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 
 	device, err := compileDevice(MeterConfig{
 		Name:    "primary_meter",
-		UnitIDs: []uint8{1, 200},
-		Source:  SourceConfig{Type: "tcp", UnitID: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
+		UnitIds: []uint8{1, 200},
+		Source:  SourceConfig{Type: "tcp", UnitId: 1, Timeout: time.Second, TCP: TCPSourceConfig{Host: "127.0.0.1", Port: 502}},
 		Poll:    PollConfig{Interval: time.Second, MaxBlockGap: 4, MaxBlockSize: 125},
 		Map: map[string]MappingConfig{
 			"energy_import": reg(40999, "uint64", 0),
@@ -207,7 +207,7 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 
 	server := newTestServer()
 	defer server.Close()
-	if err := server.server.NewDevice(200); err != nil {
+	if err := server.server.NewUnit(200); err != nil {
 		t.Fatalf("NewDevice() error = %v", err)
 	}
 
@@ -216,19 +216,19 @@ func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 	}
 
 	// Every unit ID serves the same values; only the SunSpec Modbus address differs.
-	for _, unitID := range []uint8{1, 200} {
-		t.Run(fmt.Sprintf("unit%d", unitID), func(t *testing.T) {
-			checkLegacyFroniusMap(t, server, unitID)
+	for _, unitId := range []uint8{1, 200} {
+		t.Run(fmt.Sprintf("unit%d", unitId), func(t *testing.T) {
+			checkLegacyFroniusMap(t, server, unitId)
 		})
 	}
 }
 
-func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitID uint8) {
+func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitId uint8) {
 	t.Helper()
 
 	get := func(addr uint16) uint16 {
 		t.Helper()
-		v, err := server.holdingRegister(unitID, addr)
+		v, err := server.holdingRegister(unitId, addr)
 		if err != nil {
 			t.Fatalf("GetHoldingRegister(%d) error = %v", addr, err)
 		}
@@ -273,8 +273,8 @@ func checkLegacyFroniusMap(t *testing.T, server *ModbusServerService, unitID uin
 	}
 
 	// SunSpec block: own Modbus address, PF in percent with PF_SF -1 and end block after the meter model.
-	if got := get(40068); got != uint16(unitID) {
-		t.Errorf("register 40068 (DA) = %d, want %d", got, unitID)
+	if got := get(40068); got != uint16(unitId) {
+		t.Errorf("register 40068 (DA) = %d, want %d", got, unitId)
 	}
 	if got := int16(get(40103)); got != 820 {
 		t.Errorf("register 40103 (PFphA) = %d, want 820", got)
@@ -326,7 +326,7 @@ func TestCheckPlausibility(t *testing.T) {
 func TestPollAndUpdateDiscardsSpike(t *testing.T) {
 	device, err := compileDevice(MeterConfig{
 		Name:       "main_meter",
-		UnitIDs:    []uint8{1},
+		UnitIds:    []uint8{1},
 		MaxCurrent: 63,
 		Map: map[string]MappingConfig{
 			"power_total": {Type: "register", Address: 0, DType: "int32", ByteOrder: "big", WordOrder: "big"},
@@ -395,7 +395,7 @@ func TestSmartfoxSingleReadBlock(t *testing.T) {
 }
 
 func TestStatusAndReady(t *testing.T) {
-	device := &compiledDevice{Config: MeterConfig{Name: "m", UnitIDs: []uint8{1}, Poll: PollConfig{Interval: time.Second}}}
+	device := &compiledDevice{Config: MeterConfig{Name: "m", UnitIds: []uint8{1}, Poll: PollConfig{Interval: time.Second}}}
 	service := &ModbusService{devices: []*compiledDevice{device}}
 	now := time.Now()
 
@@ -423,9 +423,9 @@ func newTestServer() *ModbusServerService {
 	return &ModbusServerService{server: mbserver.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))}
 }
 
-// holdingRegister reads one holding register of unitID, for assertions.
-func (s *ModbusServerService) holdingRegister(unitID uint8, addr uint16) (uint16, error) {
-	regs, err := s.server.HoldingRegisters(unitID, addr, 1)
+// holdingRegister reads one holding register of unitId, for assertions.
+func (s *ModbusServerService) holdingRegister(unitId uint8, addr uint16) (uint16, error) {
+	regs, err := s.server.HoldingRegisters(unitId, addr, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -438,9 +438,9 @@ func staleTestDevice(t *testing.T, staleTimeout *time.Duration) (*compiledDevice
 	t.Helper()
 	device, err := compileDevice(MeterConfig{
 		Name:         "m",
-		UnitIDs:      []uint8{1},
+		UnitIds:      []uint8{1},
 		StaleTimeout: staleTimeout,
-		Source:       SourceConfig{Type: "tcp", UnitID: 1, TCP: TCPSourceConfig{Host: "192.0.2.1", Port: 502}},
+		Source:       SourceConfig{Type: "tcp", UnitId: 1, TCP: TCPSourceConfig{Host: "192.0.2.1", Port: 502}},
 		Poll:         PollConfig{Interval: time.Second, MaxBlockSize: 125},
 		Map:          map[string]MappingConfig{"power_total": {Type: "register", Address: 0, DType: "int32", ByteOrder: "big", WordOrder: "big"}},
 	})

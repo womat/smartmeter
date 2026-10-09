@@ -62,15 +62,15 @@ webserver:
 # Modbus server (facing the inverter and other clients)
 # =============================================================================
 # TCP and RTU can be active at the same time; both serve every unit ID of every meter.
+# A listener is active when its block is present: delete or comment out a block to turn it
+# off. Defaults: tcp 0.0.0.0:502, rtu 9600 8N1 (port is required).
 listen:
   tcp:
-    enabled: true
     host: 0.0.0.0
     port: 502
 
   # RS485 to the Fronius inverter (the inverter polls unit ID 1 at 9600 8N1)
   rtu:
-    enabled: true
     port: /dev/ttyS0
     baudRate: 9600
     dataBits: 8
@@ -86,7 +86,7 @@ listen:
 # =============================================================================
 # Emulated meters, keyed by name
 # =============================================================================
-# unitIDs      - Unit IDs the meter answers on (1-247, unique across all meters).
+# unitIds      - Unit IDs the meter answers on (1-247, unique across all meters).
 #                All IDs serve the same values. Fronius convention:
 #                1 = inverter via RS485, 200 = SunSpec meter via TCP.
 # maxCurrent   - Rated current per phase in A (Fronius Smart Meter 63A-3: 63).
@@ -108,7 +108,7 @@ listen:
 #
 # source       - Upstream meter
 #   type       - tcp | rtu
-#   unitID     - Unit ID of the upstream meter
+#   unitId     - Unit ID of the upstream meter
 #   timeout    - Request timeout as Go duration string (default 2s)
 #   tcp        - host, port (default 502)
 #   rtu        - port, baudRate, dataBits, parity, stopBits (default 9600 8N1)
@@ -137,7 +137,7 @@ meter:
   # Register list (1-based in the document, 0-based here):
   # https://smartfox.at/wp-content/uploads/2022/12/Modbus-Register-SMARTFOX-Pro-SMARTFOX-Pro-2-v22e-00.01.03.10.xlsx
   primary_meter:
-    unitIDs: [ 1, 200 ]
+    unitIds: [ 1, 200 ]
     maxCurrent: 63
     staleTimeout: 30s
     limits:
@@ -147,7 +147,7 @@ meter:
 
     source:
       type: tcp
-      unitID: 1
+      unitId: 1
       timeout: 300ms
       tcp:
         host: smartfox.local

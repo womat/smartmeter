@@ -33,7 +33,7 @@ func NewModbusServerService(meters map[string]MeterConfig) (*ModbusServerService
 		return nil, nil
 	}
 
-	if err := CheckUniqueUnitIDs(meters); err != nil {
+	if err := CheckUniqueUnitIds(meters); err != nil {
 		return nil, err
 	}
 
@@ -43,16 +43,16 @@ func NewModbusServerService(meters map[string]MeterConfig) (*ModbusServerService
 	}
 
 	for _, name := range Names(meters) {
-		for _, id := range meters[name].UnitIDs {
+		for _, id := range meters[name].UnitIds {
 			// unit ID 1 is created by mbserver.NewServer
 			if id != 1 {
-				if err := server.NewDevice(id); err != nil {
-					return nil, fmt.Errorf("create Modbus device %d: %w", id, err)
+				if err := server.NewUnit(id); err != nil {
+					return nil, fmt.Errorf("create Modbus unit %d: %w", id, err)
 				}
 			}
 			// Silent until the first valid snapshot: a client never reads empty registers.
 			if err := server.SetOnline(id, false); err != nil {
-				return nil, fmt.Errorf("Modbus device %d: %w", id, err)
+				return nil, fmt.Errorf("Modbus unit %d: %w", id, err)
 			}
 		}
 	}
@@ -74,7 +74,7 @@ func (s *ModbusServerService) Start(listen ListenConfig) error {
 		return fmt.Errorf("start Modbus server: %w", err)
 	}
 
-	if listen.TCP.Enabled {
+	if listen.TCP != nil {
 		address := net.JoinHostPort(listen.TCP.Host, strconv.Itoa(listen.TCP.Port))
 		if err := s.server.ListenTCP(ctx, address); err != nil {
 			return fmt.Errorf("listen tcp %s: %w", address, err)
@@ -82,7 +82,7 @@ func (s *ModbusServerService) Start(listen ListenConfig) error {
 		slog.Info("Modbus TCP listener started", "address", address)
 	}
 
-	if listen.RTU.Enabled {
+	if listen.RTU != nil {
 		config, err := serialConfig(listen.RTU.SerialConfig)
 		if err != nil {
 			return err
@@ -99,10 +99,10 @@ func (s *ModbusServerService) Start(listen ListenConfig) error {
 	return nil
 }
 
-// SetOnline takes unitID off the bus (online false) or back on it; its registers stay as they
+// SetOnline takes unitId off the bus (online false) or back on it; its registers stay as they
 // are. An offline unit ID is answered like an unknown one: silence over RTU, exception 11 over TCP.
-func (s *ModbusServerService) SetOnline(unitID uint8, online bool) error {
-	return s.server.SetOnline(unitID, online)
+func (s *ModbusServerService) SetOnline(unitId uint8, online bool) error {
+	return s.server.SetOnline(unitId, online)
 }
 
 // Activity is the state of the listeners for the web page: where they listen and how many
@@ -133,14 +133,14 @@ func (s *ModbusServerService) Activity() Activity {
 		return a
 	}
 	st := s.server.Stats()
-	if s.listen.TCP.Enabled {
+	if s.listen.TCP != nil {
 		a.TCP = &TCPActivity{
 			Address:  net.JoinHostPort(s.listen.TCP.Host, strconv.Itoa(s.listen.TCP.Port)),
 			Requests: st.TCPRequests,
 			Clients:  st.TCPClients,
 		}
 	}
-	if s.listen.RTU.Enabled {
+	if s.listen.RTU != nil {
 		c := s.listen.RTU.SerialConfig
 		a.RTU = &RTUActivity{
 			Port:     c.Port,
@@ -203,15 +203,15 @@ func (s *ModbusServerService) Close() error {
 	return nil
 }
 
-// WriteSnapshot encodes snapshot into the Fronius register maps of unitID as one consistent
+// WriteSnapshot encodes snapshot into the Fronius register maps of unitId as one consistent
 // update: a client reads either the previous or the new snapshot, never a mix.
-func (s *ModbusServerService) WriteSnapshot(unitID uint8, snapshot fronius.Snapshot) error {
+func (s *ModbusServerService) WriteSnapshot(unitId uint8, snapshot fronius.Snapshot) error {
 	var bank fronius.RegisterBank
 	if err := bank.WriteSnapshot(snapshot); err != nil {
 		return err
 	}
 
-	return s.server.UpdateHoldingRegisters(unitID, func(registers []uint16) error {
+	return s.server.UpdateHoldingRegisters(unitId, func(registers []uint16) error {
 		for _, entry := range fronius.FroniusRegisterMap {
 			for offset := range entry.Width() {
 				registers[entry.Addr+offset] = bank.Uint16(entry.Addr + offset)
@@ -234,7 +234,7 @@ type RegisterRow struct {
 
 // RegisterDump holds both register maps of one unit ID.
 type RegisterDump struct {
-	UnitID      uint8         `json:"unitID"`
+	UnitId      uint8         `json:"unitId"`
 	Online      bool          `json:"online"`      // false: the unit ID does not answer, see staleTimeout
 	Proprietary []RegisterRow `json:"proprietary"` // Fronius RS485 map, read by the inverter
 	SunSpec     []RegisterRow `json:"sunspec"`     // SunSpec models 1 and 203, read by wallboxes and evcc
@@ -243,18 +243,18 @@ type RegisterDump struct {
 // ErrUnknownUnit is returned by Registers for a unit ID no meter answers on.
 var ErrUnknownUnit = errors.New("unknown unit ID")
 
-// Registers returns both register maps of unitID as a client would read them, from one
+// Registers returns both register maps of unitId as a client would read them, from one
 // consistent copy: no mix of two snapshots.
-func (s *ModbusServerService) Registers(unitID uint8) (RegisterDump, error) {
-	dump := RegisterDump{UnitID: unitID, Online: s.server.Online(unitID)}
+func (s *ModbusServerService) Registers(unitId uint8) (RegisterDump, error) {
+	dump := RegisterDump{UnitId: unitId, Online: s.server.Online(unitId)}
 	var regs []uint16
 	// UpdateHoldingRegisters holds the lock while the copy is made; nothing is changed.
-	err := s.server.UpdateHoldingRegisters(unitID, func(r []uint16) error {
+	err := s.server.UpdateHoldingRegisters(unitId, func(r []uint16) error {
 		regs = slices.Clone(r)
 		return nil
 	})
 	if err != nil {
-		return dump, fmt.Errorf("%w %d", ErrUnknownUnit, unitID)
+		return dump, fmt.Errorf("%w %d", ErrUnknownUnit, unitId)
 	}
 
 	rows := func(entries []fronius.RegisterEntry) []RegisterRow {

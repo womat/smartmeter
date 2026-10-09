@@ -69,7 +69,7 @@ type compiledDevice struct {
 
 // MeterStatus is the diagnostic state of one meter, reported by /health.
 type MeterStatus struct {
-	UnitIDs       []int      `json:"unitIDs"`                 // Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)
+	UnitIds       []int      `json:"unitIds"`                 // Unit IDs the meter answers on (int: []uint8 would be base64 in JSON)
 	Source        string     `json:"source"`                  // Upstream meter, e.g. "tcp 192.168.1.10:502 unit 1"
 	Ready         bool       `json:"ready"`                   // Values are current, see staleAfter
 	Online        bool       `json:"online"`                  // The unit IDs answer, see staleTimeout
@@ -96,8 +96,8 @@ type MeterStatus struct {
 const staleAfter = 3
 
 type snapshotWriter interface {
-	WriteSnapshot(unitID uint8, snapshot fronius.Snapshot) error
-	SetOnline(unitID uint8, online bool) error
+	WriteSnapshot(unitId uint8, snapshot fronius.Snapshot) error
+	SetOnline(unitId uint8, online bool) error
 }
 
 type ModbusService struct {
@@ -112,7 +112,7 @@ func NewModbusService(meters map[string]MeterConfig) (*ModbusService, error) {
 		return nil, nil
 	}
 
-	if err := CheckUniqueUnitIDs(meters); err != nil {
+	if err := CheckUniqueUnitIds(meters); err != nil {
 		return nil, err
 	}
 
@@ -366,21 +366,21 @@ func (d *compiledDevice) checkStale(writer snapshotWriter, now time.Time) {
 		return
 	}
 	slog.Warn("No valid values from the source, unit IDs no longer answer",
-		"meter", d.Config.Name, "unitIDs", d.unitIDs(), "staleTimeout", timeout, "lastValid", d.lastSuccessTime())
+		"meter", d.Config.Name, "unitIds", d.unitIds(), "staleTimeout", timeout, "lastValid", d.lastSuccessTime())
 }
 
 func (d *compiledDevice) setOnline(writer snapshotWriter, online bool) error {
 	var errs error
-	for _, id := range d.Config.UnitIDs {
+	for _, id := range d.Config.UnitIds {
 		errs = errors.Join(errs, writer.SetOnline(id, online))
 	}
 	return errs
 }
 
-// unitIDs returns the unit IDs as numbers for logging; slog prints []uint8 as bytes.
-func (d *compiledDevice) unitIDs() []int {
-	ids := make([]int, 0, len(d.Config.UnitIDs))
-	for _, id := range d.Config.UnitIDs {
+// unitIds returns the unit IDs as numbers for logging; slog prints []uint8 as bytes.
+func (d *compiledDevice) unitIds() []int {
+	ids := make([]int, 0, len(d.Config.UnitIds))
+	for _, id := range d.Config.UnitIds {
 		ids = append(ids, int(id))
 	}
 	return ids
@@ -410,10 +410,10 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 
 	// The same snapshot is served on every unit ID; only the SunSpec
 	// Modbus address (40068) differs per unit ID.
-	for _, id := range d.Config.UnitIDs {
+	for _, id := range d.Config.UnitIds {
 		snapshot.Set(fronius.FieldModbusAddr, float64(id))
 		if err = writer.WriteSnapshot(id, snapshot); err != nil {
-			err = fmt.Errorf("unitID %d: %w", id, err)
+			err = fmt.Errorf("unitId %d: %w", id, err)
 			d.recordError(err, false)
 			return err
 		}
@@ -436,9 +436,9 @@ func (d *compiledDevice) pollAndUpdate(writer snapshotWriter) error {
 		if err = d.setOnline(writer, true); err != nil {
 			return fmt.Errorf("bring unit IDs online: %w", err)
 		}
-		slog.Info("Valid values from the source, unit IDs answer", "meter", d.Config.Name, "unitIDs", d.unitIDs())
+		slog.Info("Valid values from the source, unit IDs answer", "meter", d.Config.Name, "unitIds", d.unitIds())
 	}
-	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIDs", d.unitIDs())
+	slog.Debug("Modbus snapshot updated", "meter", d.Config.Name, "unitIds", d.unitIds())
 	return nil
 }
 
@@ -472,7 +472,7 @@ func (d *compiledDevice) status(now time.Time) MeterStatus {
 		t := d.offlineSince
 		st.OfflineSince = &t
 	}
-	st.UnitIDs = d.unitIDs()
+	st.UnitIds = d.unitIds()
 	if !d.lastSuccess.IsZero() {
 		last := d.lastSuccess
 		age := now.Sub(last).Seconds()
@@ -843,7 +843,7 @@ func newTCPRegisterReader(source SourceConfig) (*simonRegisterReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = client.SetUnitId(source.UnitID); err != nil {
+	if err = client.SetUnitId(source.UnitId); err != nil {
 		return nil, err
 	}
 	if err = client.Open(); err != nil {
@@ -897,7 +897,7 @@ func newRTURegisterReader(source SourceConfig) (*simonRegisterReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = client.SetUnitId(source.UnitID); err != nil {
+	if err = client.SetUnitId(source.UnitId); err != nil {
 		return nil, err
 	}
 	if err = client.Open(); err != nil {

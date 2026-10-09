@@ -44,7 +44,7 @@ docs/generate.sh   # from the project root; needs swaggo/swag v1.16.6 installed
 go run ./cmd/main.go --config config/config.yaml --debug
 ```
 
-For a test next to a running instance, copy the config and set `listen.rtu.enabled: false` and `listen.tcp.port: 1502`; the upstream meter is only read.
+For a test next to a running instance, copy the config, remove the `listen.rtu` block and set `listen.tcp.port: 1502`; the upstream meter is only read.
 
 ## Architecture
 
