@@ -40,6 +40,7 @@ the same time, so all clients see the same values from the same moment.
 - **Several unit IDs per meter** and several meters per instance
 - **Spike filter**: implausible readings (beyond what a meter of the configured rated current can
   measure) are discarded, the last valid values stay in place
+- **Reconnects to the source** after a dropped connection or a restart of the source meter
 - **Source failure is visible to the inverter**: without valid values for `staleTimeout` (30 s) the
   unit IDs stop answering, so the inverter sees a failed meter instead of frozen values; they
   never answer before the first valid values
@@ -440,6 +441,12 @@ settings, e.g. the export limit, instead of acting on frozen values. The next va
 unit IDs back, with no moment of empty registers. Both steps are logged (`unit IDs no longer answer`,
 `unit IDs answer`). `staleTimeout: 0s` keeps answering with the last values.
 
+After a failed read smartmeter closes the connection to the source and opens it again before the
+next poll, so a source that dropped the connection (`broken pipe`, `connection reset by peer`) or
+was restarted is read again at the next poll interval without a restart of smartmeter. The log
+shows the first failed poll, then one line a minute with the number of failed polls
+(`failedPolls`) while the source stays down, and `Source answers again` when it is back.
+
 ---
 
 ## Register maps
@@ -639,7 +646,8 @@ and logs `Serial port reopened` once it is back; meanwhile `/ready` answers 503 
 **`/ready` answers 503**
 The upstream meter has not delivered valid values for three poll intervals. `lastError` in
 `/health` and `Modbus poll failed` in the log give the reason, typically a timeout or a wrong
-address. `Implausible Modbus snapshot discarded` means the source delivered values beyond the
+address; while the source stays down the log repeats it once a minute with `failedPolls`, and
+smartmeter keeps reconnecting on its own (see [Source failure](#source-failure)). `Implausible Modbus snapshot discarded` means the source delivered values beyond the
 [spike filter](#spike-filter); check `maxCurrent` and the scaling of the power fields.
 
 **Service is `dead` immediately after start**

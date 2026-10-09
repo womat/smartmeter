@@ -18,7 +18,8 @@ Der Quellzähler wird einmal pro Intervall gelesen und unter allen Unit-IDs und 
 gleichzeitig bereitgestellt. Unplausible Werte (Spikes) werden verworfen, die letzten gültigen
 Werte bleiben stehen. Liefert die Quelle länger als `staleTimeout` (30 s) keine gültigen Werte,
 antworten die Unit-IDs nicht mehr: Der Wechselrichter erkennt einen Zählerausfall, statt mit
-eingefrorenen Werten zu regeln.
+eingefrorenen Werten zu regeln. Bricht die Verbindung zur Quelle ab, verbindet smartmeter beim
+nächsten Abfrageintervall selbst neu.
 
 Unter `https://<dein-pi>:8443/` zeigt eine Web-Seite Energiefluss, Leistung, Phasen, Zählerstände
 und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein Internet.
