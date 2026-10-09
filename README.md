@@ -1,4 +1,4 @@
-# <img src="docs/images/logo.svg" alt="" width="40" align="top"> smartmeter
+# smartmeter
 
 **Turn any Modbus energy meter into a Fronius Smart Meter — for the inverter on RS485 and for wallboxes on TCP.**
 
@@ -10,6 +10,15 @@
 
 🇩🇪 [Deutsche Kurzfassung](README.de.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/web-ui-dark.png">
+    <img src="docs/screenshots/web-ui.png" width="640" alt="smartmeter web page: energy flow from the source meter to the inverter and the TCP clients, 3 141 W export, the three phases, the energy counters and details">
+  </picture>
+  &nbsp;
+  <img src="docs/screenshots/web-ui-phone.png" width="180" alt="The same page on a phone">
+</p>
+
 A Fronius inverter only accepts a Fronius Smart Meter at its meter input. If the grid connection is
 already measured by another device — a Smartfox, an energy manager, any meter with a Modbus
 interface — smartmeter reads that device and **answers as a Fronius Smart Meter 63A-3**:
@@ -20,13 +29,6 @@ interface — smartmeter reads that device and **answers as a Fronius Smart Mete
 
 One upstream meter is polled once per interval and served on every unit ID and both transports at
 the same time, so all clients see the same values from the same moment.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/web-ui-dark.png">
-  <img src="docs/images/web-ui-light.png" alt="The smartmeter web page: energy flow from the source meter to the inverter and the TCP clients, 3 141 W export, the three phases, the energy counters and details" width="800">
-</picture>
-
-*The built-in [web page](#web-page) (sample values).*
 
 ---
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>smartmeter</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563a8'/%3E%3Crect x='7.5' y='3.5' width='17' height='25' rx='3' fill='%23f7f9fb'/%3E%3Crect x='10' y='6.5' width='12' height='4.5' rx='1' fill='%231b232d'/%3E%3Crect x='19' y='6.5' width='3' height='4.5' rx='1' fill='%23e8231a'/%3E%3Crect x='9.5' y='13.5' width='13' height='7' rx='2' fill='%231b232d'/%3E%3Crect x='9.5' y='15.6' width='13' height='2.8' fill='%238a96a3'/%3E%3Crect x='15' y='15.6' width='2.2' height='2.8' fill='%23e8231a'/%3E%3Cpath d='M11 24.5h10' stroke='%23c9cfd6' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563a8'/%3E%3Cg fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='3.5' width='16' height='25' rx='3' stroke-width='2'/%3E%3Crect x='11' y='7' width='10' height='4.2' rx='1' stroke-width='1.6'/%3E%3Crect x='11' y='16' width='10' height='6' rx='1.4' stroke-width='1.6'/%3E%3C/g%3E%3Crect x='17.4' y='7.9' width='2.6' height='2.4' rx='.5' fill='%23ff4a3d'/%3E%3Crect x='15' y='17.4' width='2.2' height='3.2' fill='%23ff4a3d'/%3E%3C/svg%3E">
 <!--
   Web page of smartmeter, embedded in the binary and served at GET /.
   It holds no data itself: it asks for the API key once, keeps it in localStorage and polls /health
@@ -92,7 +92,9 @@ header {
   padding-bottom: 14px; border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.brand .mark { width: 38px; height: 38px; flex: none; }
+.brand .mark { width: 30px; height: 34px; color: var(--accent); flex: none; }
+.brand .mark .red { fill: var(--logo-red); }
+.brand .mark .muted { stroke: var(--muted); }
 .brand .words { display: flex; flex-direction: column; line-height: 1.1; }
 .brand h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
 .brand h1 b { color: var(--accent); }
@@ -146,6 +148,23 @@ header {
 .fan { display: grid; gap: 10px; min-width: 0; }
 .fan .row { display: grid; grid-template-columns: minmax(56px, .45fr) minmax(0, 1fr); align-items: center; }
 .fan.in .row { grid-template-columns: minmax(0, 1fr) minmax(56px, .55fr); }
+/* Several targets: the hub feeds a vertical spine at its own height, every target branches off it
+   with its own wire. Each row draws its piece of the spine, from the middle of the first row to
+   the middle of the last; the gap between the rows is bridged by half a gap on either side. */
+.fan.branch { position: relative; padding-left: 18px; }
+.fan.branch::before {
+  content: ""; position: absolute; left: 0; width: 18px; top: 50%; height: 2px; transform: translateY(-50%);
+  background: repeating-linear-gradient(90deg, var(--spine) 0 7px, transparent 7px 12px);
+}
+.fan.branch .row { position: relative; }
+.fan.branch .row::before {
+  content: ""; position: absolute; left: -1px; width: 2px; top: -5px; bottom: -5px;
+  background: repeating-linear-gradient(180deg, var(--spine) 0 7px, transparent 7px 12px);
+}
+.fan.branch .row:first-child::before { top: 50%; }
+.fan.branch .row:last-child::before { bottom: 50%; }
+.fan.branch.ok { --spine: var(--ok); }
+.fan.branch.crit { --spine: var(--crit); }
 
 /* A link is a dashed line with an activity LED and a short label. The line color is the state;
    the LED flashes once per request on that link (poll of the source, request from a client). */
@@ -174,6 +193,8 @@ header {
 @media (max-width: 760px) {
   .flow { grid-template-columns: minmax(0, 1fr); }
   .fan.out { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+  .fan.branch { padding-left: 0; }
+  .fan.branch::before, .fan.branch .row::before { content: none; }
   .fan .row, .fan.in .row { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
   .link { height: 44px; }
   .link .wire {
@@ -320,22 +341,17 @@ td.field.fixed { font-style: italic; }
     <div class="stack">
       <header>
         <div class="brand">
-          <!-- The meter: counter on top, the disc in the slot, the type plate below. The red mark
-               runs like the disc of a Ferraris meter, see animate(). Fixed colors: it is a white
-               device on the tile in both themes. -->
-          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="var(--accent)"/>
-            <rect x="7.5" y="3.5" width="17" height="25" rx="3" fill="#f7f9fb"/>
-            <rect x="10" y="6.5" width="12" height="4.5" rx="1" fill="#1b232d"/>
-            <rect x="19" y="6.5" width="3" height="4.5" rx="1" fill="#e8231a"/>
-            <path d="M13 7.6v2.3M16 7.6v2.3" stroke="#f7f9fb" stroke-width=".9" stroke-linecap="round" opacity=".8"/>
-            <clipPath id="slot"><rect x="9.5" y="13.5" width="13" height="7" rx="2"/></clipPath>
-            <g clip-path="url(#slot)">
-              <rect x="9.5" y="13.5" width="13" height="7" fill="#1b232d"/>
-              <rect x="9.5" y="15.6" width="13" height="2.8" fill="#8a96a3"/>
-              <rect id="discmark" x="15" y="15.6" width="2.2" height="2.8" fill="#e8231a"/>
-            </g>
-            <path d="M11 24.5h10" stroke="#c9cfd6" stroke-width="1.4" stroke-linecap="round"/>
+          <!-- The meter as a line icon: housing, the counter with its red decimal digit, and the slot
+               with the disc. The red mark runs like the disc of a Ferraris meter, see animate(). -->
+          <svg class="mark" viewBox="0 0 30 34" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <clipPath id="slot"><rect x="8" y="18" width="14" height="7" rx="1.6"/></clipPath>
+            <rect x="3" y="2" width="24" height="30" rx="4"/>
+            <rect x="8" y="7" width="14" height="5" rx="1.2" stroke-width="1.8"/>
+            <rect class="red" x="17.6" y="7.9" width="3.5" height="3.2" rx=".6" stroke="none"/>
+            <path class="muted" d="M11.6 8.6v1.8M14.6 8.6v1.8" stroke-width="1"/>
+            <rect x="8" y="18" width="14" height="7" rx="1.6" stroke-width="1.8"/>
+            <path class="muted" d="M9.5 21.5h11" stroke-width="1.4"/>
+            <g clip-path="url(#slot)"><rect class="red" id="discmark" x="14" y="19.2" width="2.4" height="4.6" stroke="none"/></g>
           </svg>
           <div class="words"><h1>smart<b>meter</b></h1><span class="sub">Fronius Smart Meter 63A-3 emulator</span></div>
           <div class="words device"><span class="host" id="host">–</span><span class="sub">host</span></div>
@@ -473,7 +489,7 @@ function renderFlow(h, meters, names, rates) {
   $("flow").innerHTML = `
     <div class="fan in">${sources}</div>
     <div class="node hub"><span class="label">Serves as</span><h3>smart<b>meter</b></h3><span class="addr">${addr(["Fronius 63A-3", "units " + ids.join(", ")])}</span></div>
-    <div class="fan out">${targets.join("") || `<p class="waiting">No Modbus listener configured.</p>`}</div>`;
+    <div class="fan out${targets.length > 1 ? " branch " + (anyOnline ? "ok" : "crit") : ""}">${targets.join("") || `<p class="waiting">No Modbus listener configured.</p>`}</div>`;
 }
 
 // Square-root scale from the export limit (left) to the import limit (right), so 50 W stays visible.
@@ -755,8 +771,8 @@ function animate(now) {
   // The red mark passes the slot on the front half of each revolution.
   const a = phase * 2 * Math.PI, c = Math.max(Math.cos(a), 0);
   const mark = $("discmark");
-  mark.setAttribute("x", 16 + 7.5 * Math.sin(a) - 1.1 * c);
-  mark.setAttribute("width", 2.2 * c);
+  mark.setAttribute("x", 15 + 7 * Math.sin(a) - 1.2 * c);
+  mark.setAttribute("width", 2.4 * c);
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);

@@ -38,6 +38,15 @@ Swagger UI is behind the `swagger` build tag (`app/swagger.go` vs `app/swagger_s
 docs/generate.sh   # from the project root; needs swaggo/swag v1.16.6 installed
 ```
 
+### Screenshots
+
+The README screenshots and the social preview are rendered from the real `app/ui/index.html` with a mocked `/health` in headless Chromium. Re-run after visible UI changes; the social preview is uploaded by hand in the repository settings:
+
+```sh
+docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/playwright/python:v1.52.0-noble \
+  sh -c 'pip install -q --break-system-packages playwright==1.52.0 && python3 docs/screenshots/capture.py'
+```
+
 ### Running locally
 
 ```sh

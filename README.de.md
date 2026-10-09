@@ -1,6 +1,10 @@
-# <img src="docs/images/logo.svg" alt="" width="40" align="top"> smartmeter – Deutsche Kurzfassung
+# smartmeter – Deutsche Kurzfassung
 
 🇬🇧 [Full documentation in English](README.md)
+
+<p align="center">
+  <img src="docs/screenshots/web-ui.png" width="640" alt="Weboberfläche von smartmeter mit dem Energiefluss vom Quellzähler zum Wechselrichter und den TCP-Clients, den drei Phasen und den Zählerständen">
+</p>
 
 **smartmeter macht aus einem beliebigen Modbus-Energiezähler einen Fronius Smart Meter – für den
 Wechselrichter über RS485 und für Wallboxen über TCP.**
