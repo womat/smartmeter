@@ -83,4 +83,4 @@ Layering is strict: `cmd` → `app` → `app/service/*` → `pkg/*`. Lower layer
 - Doc comments: every package and exported symbol is documented, in English; Swagger annotations live on the handlers.
 - No "master"/"slave" wording anywhere — use server/client and unit ID.
 - Config field docs live in `README.md` and `config/config.yaml` — update both when adding a config key. `cmd/README.md` is the short `--help` text and only points to them.
-- Commit subjects use the prefixes `feat()`, `fix()`, `docu()`, `chore()`, `refactor()`; the release changelog groups on them (`.goreleaser.yaml`).
+- Commit subjects follow Conventional Commits, `type(scope): description` with an optional scope (`fix: default port 8443`, `feat(ui): …`), types `feat`, `fix`, `docu`, `chore`, `refactor`. The release changelog groups on them (`.goreleaser.yaml`).
