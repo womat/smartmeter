@@ -560,8 +560,9 @@ taken from one consistent copy.
 
 `https://<your-pi>:8443/` shows the state at a glance and refreshes every 2 seconds:
 
-- **Energy flow**: source meter → smartmeter → inverter (RS485) and TCP clients. A line turns red
-  when a link fails; its LED flashes once per poll of the source or per request of a client.
+- **Flow**, in the direction a request runs: inverter (RS485) and TCP clients → smartmeter → source
+  meter, as on the sibling pages. A line turns red when a link fails; its LED flashes once per
+  request of a client or per poll of the source.
 - **Power** with direction (import/export) on a bar from the export to the import limit, the three
   **phases** with current against the fuse, the **energy counters** and details such as frequency,
   power factor, discarded readings and the last error.
