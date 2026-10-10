@@ -1,0 +1,16 @@
+# golangci-lint configuration for github.com/womat/smartmeter, run by make lint
+# and CI. The default linter set is kept. The exclusions below are decisions,
+# not convenience - each one says why, as in golib.
+
+version: "2"
+
+linters:
+  exclusions:
+    rules:
+      # Test code may ignore what it is not asserting on: a deferred Close of
+      # a listener, a Modbus server or client the test set up. Reporting those
+      # buries the findings that matter under a list of things nobody intends
+      # to handle.
+      - path: _test\.go
+        linters:
+          - errcheck

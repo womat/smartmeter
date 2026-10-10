@@ -146,7 +146,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid listen.tcp.port: %d", c.Listen.TCP.Port)
 	}
 	if c.Listen.RTU != nil {
-		if err := c.Listen.RTU.SerialConfig.Validate(); err != nil {
+		if err := c.Listen.RTU.Validate(); err != nil {
 			return fmt.Errorf("invalid listen.rtu: %w", err)
 		}
 	}

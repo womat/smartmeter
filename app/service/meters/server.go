@@ -52,7 +52,7 @@ func NewModbusServerService(meters map[string]MeterConfig) (*ModbusServerService
 			}
 			// Silent until the first valid snapshot: a client never reads empty registers.
 			if err := server.SetOnline(id, false); err != nil {
-				return nil, fmt.Errorf("Modbus unit %d: %w", id, err)
+				return nil, fmt.Errorf("set Modbus unit %d offline: %w", id, err)
 			}
 		}
 	}

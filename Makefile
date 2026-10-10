@@ -65,7 +65,7 @@ LDFLAGS := -X 'main.buildDate=$(BUILD_DATE)' \
            -X 'main.buildCommit=$(BUILD_COMMIT)' \
            -X 'github.com/womat/smartmeter/app.VERSION=$(VERSION)'
 
-.PHONY: all test release deploy_release deploy deploy_dev clean help ensure_dev_certs
+.PHONY: all test lint release deploy_release deploy deploy_dev clean help ensure_dev_certs
 
 all: help
 
@@ -78,6 +78,14 @@ clean: ## Remove build related file
 
 test: ensure_dev_certs ## run all tests with the race detector
 	go test -race ./...
+
+# The linters are pinned like govulncheck in CI; dependabot does not see them, raise
+# them by hand. golangci-lint runs the default linters with the exclusions in .golangci.yml.
+lint: ensure_dev_certs ## gofmt, go vet, golangci-lint and govulncheck
+	@test -z "$$(gofmt -l .)" || { echo "not gofmt'ed:"; gofmt -l .; exit 1; }
+	go vet ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
 ensure_dev_certs:
 	@mkdir -p $(DEV_CERT_DIR)
