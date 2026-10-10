@@ -122,8 +122,8 @@ func TestPollingEndToEnd(t *testing.T) {
 	waitUntil("the new voltage", func() bool { return read32(1, 4096) == 235000 })
 }
 
-// TestPollingReconnectsAfterSourceDropsConnection: the source closes the connection (on
-// primary-meter the Smartfox did, "write: broken pipe" for hours) and is back a moment later.
+// TestPollingReconnectsAfterSourceDropsConnection: the source closes the connection (in
+// production a Smartfox did, "write: broken pipe" for hours) and is back a moment later.
 // smartmeter must reconnect on its own and serve the new values, without a restart.
 func TestPollingReconnectsAfterSourceDropsConnection(t *testing.T) {
 	registers := map[uint16]uint16{41017: 0, 41018: 100, 41025: 2300, 41037: 5000}

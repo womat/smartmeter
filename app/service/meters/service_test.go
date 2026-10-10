@@ -153,7 +153,7 @@ func TestPollAndUpdateWritesFroniusRegisters(t *testing.T) {
 }
 
 // TestPollAndUpdateWritesLegacyFroniusMap checks the proprietary 4096 map against
-// values read from the productive emulator on primary-meter (Smartfox as source).
+// values read from a productive emulator (Smartfox as source).
 func TestPollAndUpdateWritesLegacyFroniusMap(t *testing.T) {
 	reg := func(address uint16, dtype string, scale int) MappingConfig {
 		return MappingConfig{Type: "register", Address: address, DType: dtype, ByteOrder: "big", WordOrder: "big", Scale: scale}

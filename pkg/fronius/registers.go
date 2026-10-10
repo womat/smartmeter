@@ -107,8 +107,8 @@ var FroniusRegisterMap = slices.Concat(ProprietaryRegisterMap, SunSpecRegisterMa
 // Fronius Smart Meter 63A-3 as polled by the inverter (unit ID 1, 9600 8N1, FC03).
 //
 // Fronius publishes no specification for this range. The map was obtained in 2020
-// by sniffing the RS485 traffic between inverter and a real meter (see emu.yaml on
-// primary-meter) and is partially confirmed by the LoxWiki page
+// by sniffing the RS485 traffic between inverter and a real meter (configuration of
+// the old emulator) and is partially confirmed by the LoxWiki page
 // https://loxwiki.atlassian.net/wiki/spaces/LOX/pages/1536590351.
 // Keep it bit-identical to the old emulator: types, scaling and word order
 // (high word first) are what the inverter accepts. Unlisted registers in the
