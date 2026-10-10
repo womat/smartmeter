@@ -12,7 +12,7 @@
   fonts or scripts, the Pi may have no internet access.
 -->
 <style>
-/* Layout: header, energy-flow strip (sources -> smartmeter -> inverter / TCP clients), then per
+/* Layout: header, flow strip (inverter / TCP clients -> smartmeter -> source meters), then per
    meter: power, phases, counters, details; then the registers. Tokens follow s0meter, plus energy
    colors. */
 :root {
@@ -129,9 +129,11 @@ header {
 .frozen-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
   color: var(--crit); background: var(--crit-soft); padding: 3px 10px; border-radius: 999px; }
 
-/* Energy flow: fan of sources and links -> smartmeter -> fan of links and targets */
+/* Flow strip, read the way a request runs: fan of clients and links -> smartmeter -> fan of links
+   and source meters. Clients on the left, the device that is finally read on the right, as on the
+   sibling pages. */
 .flow {
-  display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 1.75fr);
+  display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr) minmax(0, 1.55fr);
   align-items: center; gap: 0;
 }
 .node {
@@ -146,19 +148,19 @@ header {
 .node.hub h3 b { color: var(--accent); }
 .node.off { border-style: dashed; color: var(--muted); }
 .fan { display: grid; gap: 10px; min-width: 0; }
-.fan .row { display: grid; grid-template-columns: minmax(56px, .45fr) minmax(0, 1fr); align-items: center; }
-.fan.in .row { grid-template-columns: minmax(0, 1fr) minmax(56px, .55fr); }
-/* Several targets: the hub feeds a vertical spine at its own height, every target branches off it
-   with its own wire. Each row draws its piece of the spine, from the middle of the first row to
-   the middle of the last; the gap between the rows is bridged by half a gap on either side. */
-.fan.branch { position: relative; padding-left: 18px; }
+.fan .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(56px, .45fr); align-items: center; }
+.fan.sources .row { grid-template-columns: minmax(56px, .55fr) minmax(0, 1fr); }
+/* Several clients: every client's wire ends on a vertical spine that feeds the hub at its own
+   height. Each row draws its piece of the spine, from the middle of the first row to the middle
+   of the last; the gap between the rows is bridged by half a gap on either side. */
+.fan.branch { position: relative; padding-right: 18px; }
 .fan.branch::before {
-  content: ""; position: absolute; left: 0; width: 18px; top: 50%; height: 2px; transform: translateY(-50%);
+  content: ""; position: absolute; right: 0; width: 18px; top: 50%; height: 2px; transform: translateY(-50%);
   background: repeating-linear-gradient(90deg, var(--spine) 0 7px, transparent 7px 12px);
 }
 .fan.branch .row { position: relative; }
 .fan.branch .row::before {
-  content: ""; position: absolute; left: -1px; width: 2px; top: -5px; bottom: -5px;
+  content: ""; position: absolute; right: -1px; width: 2px; top: -5px; bottom: -5px;
   background: repeating-linear-gradient(180deg, var(--spine) 0 7px, transparent 7px 12px);
 }
 .fan.branch .row:first-child::before { top: 50%; }
@@ -192,10 +194,10 @@ header {
 
 @media (max-width: 760px) {
   .flow { grid-template-columns: minmax(0, 1fr); }
-  .fan.out { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
-  .fan.branch { padding-left: 0; }
+  .fan.clients { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+  .fan.branch { padding-right: 0; }
   .fan.branch::before, .fan.branch .row::before { content: none; }
-  .fan .row, .fan.in .row { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .fan .row, .fan.sources .row { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
   .link { height: 44px; }
   .link .wire {
     left: 50%; right: auto; top: 0; bottom: 0; width: 2px; height: auto; transform: translateX(-50%);
@@ -464,12 +466,12 @@ function renderFlow(h, meters, names, rates) {
       ? link("ok", `every ${seconds(m.pollIntervalSeconds)}` + (m.latencyMs != null ? ` · ${Math.round(m.latencyMs)} ms` : ""),
         `Polled every ${seconds(m.pollIntervalSeconds)}; the LED flashes per poll`, "src:" + n)
       : link("crit", m.ageSeconds != null ? `no data for ${span(m.ageSeconds)}` : "no data yet", m.lastError, "src:" + n);
-    return `<div class="row"><div class="node"><span class="label">Source meter</span><h3>${esc(n)}</h3><span class="addr">${addr(parts)}</span></div>${l}</div>`;
+    return `<div class="row">${l}<div class="node"><span class="label">Source meter</span><h3>${esc(n)}</h3><span class="addr">${addr(parts)}</span></div></div>`;
   }).join("");
 
   const ids = names.flatMap(n => meters[n].unitIds);
   const mute = led => link("crit", "not answering", "No valid values from the source: the unit IDs do not answer", led);
-  const targets = [];
+  const clients = [];
   const rtu = h.modbus.rtu;
   if (rtu) {
     const port = (h.rtu || [])[0];
@@ -477,19 +479,20 @@ function renderFlow(h, meters, names, rates) {
     const l = lost ? link("crit", "lost " + time(port.since), port.error, "rtu")
       : !anyOnline ? mute("rtu")
       : link("ok", "connected" + perSecond(rates.rtu), "Serial port open; the LED flashes per request", "rtu");
-    targets.push(`<div class="row">${l}<div class="node ${lost ? "off" : ""}"><span class="label">RS485 · RTU</span><h3>Inverter</h3><span class="addr">${addr([rtu.port, rtu.line])}</span></div></div>`);
+    clients.push(`<div class="row"><div class="node ${lost ? "off" : ""}"><span class="label">RS485 · RTU</span><h3>Inverter</h3><span class="addr">${addr([rtu.port, rtu.line])}</span></div>${l}</div>`);
   }
   const tcp = h.modbus.tcp;
   if (tcp) {
-    const clients = `${tcp.clients} client${tcp.clients === 1 ? "" : "s"}`;
-    const l = !anyOnline ? mute("tcp") : link("ok", clients + perSecond(rates.tcp), "Modbus TCP server; the LED flashes per request", "tcp");
-    targets.push(`<div class="row">${l}<div class="node"><span class="label">Modbus TCP</span><h3>Wallbox, evcc</h3><span class="addr">${addr([tcp.address])}</span></div></div>`);
+    const count = `${tcp.clients} client${tcp.clients === 1 ? "" : "s"}`;
+    const l = !anyOnline ? mute("tcp") : link("ok", count + perSecond(rates.tcp), "Modbus TCP server; the LED flashes per request", "tcp");
+    clients.push(`<div class="row"><div class="node"><span class="label">Modbus TCP</span><h3>Wallbox, evcc</h3><span class="addr">${addr([tcp.address])}</span></div>${l}</div>`);
   }
 
+  // Clients left, the source meters right: the request runs from left to right.
   $("flow").innerHTML = `
-    <div class="fan in">${sources}</div>
+    <div class="fan clients${clients.length > 1 ? " branch " + (anyOnline ? "ok" : "crit") : ""}">${clients.join("") || `<p class="waiting">No Modbus listener configured.</p>`}</div>
     <div class="node hub"><span class="label">Serves as</span><h3>smart<b>meter</b></h3><span class="addr">${addr(["Fronius 63A-3", "units " + ids.join(", ")])}</span></div>
-    <div class="fan out${targets.length > 1 ? " branch " + (anyOnline ? "ok" : "crit") : ""}">${targets.join("") || `<p class="waiting">No Modbus listener configured.</p>`}</div>`;
+    <div class="fan sources">${sources}</div>`;
 }
 
 // Square-root scale from the export limit (left) to the import limit (right), so 50 W stays visible.
