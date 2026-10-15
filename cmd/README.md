@@ -29,17 +29,17 @@ smartmeter token list [--config FILE]
 The config file path can also be set via the environment variable `CONFIG_FILE`.
 
 `--version` prints the semantic version the binary was built from. It is injected from the Git tag
-at build time, so an official release reports a plain `2.0.0`, while a local development build
-reports a descriptive fallback such as `2.0.0-5-g0c13781-dirty` or `dev`. `--about` additionally
+at build time, so an official release reports a plain `4.0.1`, while a local development build
+reports a descriptive fallback such as `4.0.1-5-g0c13781-dirty` or `dev`. `--about` additionally
 shows the build date and commit.
 
 **Examples:**
 
 ```bash
-smartmeter --config /etc/smartmeter/config.yaml
+smartmeter --config /opt/smartmeter/etc/config.yaml
 smartmeter --debug
 smartmeter --version
-CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
+CONFIG_FILE=/opt/smartmeter/etc/config.yaml smartmeter
 ```
 
 `SIGHUP` reloads the configuration and the token file; a file that does not load or validate is

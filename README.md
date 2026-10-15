@@ -70,7 +70,7 @@ the same time, so all clients see the same values from the same moment.
 | `linux_arm64`  | Pi 3 / 4 / 5 / Zero 2 W with a 64-bit OS     |
 
 ```sh
-VERSION=2.0.0 ARCH=armv6        # see the release page for the latest version
+VERSION=4.0.1 ARCH=armv6        # see the release page for the latest version
 BASE=https://github.com/womat/smartmeter/releases/download/v$VERSION
 curl -LO $BASE/smartmeter_${VERSION}_linux_$ARCH.tar.gz -LO $BASE/checksums.txt
 sha256sum -c checksums.txt --ignore-missing
@@ -588,9 +588,9 @@ The config file path can also be set via the environment variable `CONFIG_FILE`;
 over it.
 
 ```bash
-smartmeter --config /etc/smartmeter/config.yaml
+smartmeter --config /opt/smartmeter/etc/config.yaml
 smartmeter --debug
-CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
+CONFIG_FILE=/opt/smartmeter/etc/config.yaml smartmeter
 ```
 
 ---
@@ -713,8 +713,7 @@ smartmeter keeps reconnecting on its own (see [Source failure](#source-failure))
 **Service is `dead` immediately after start**
 A configuration error: smartmeter exits with code 78, and the unit does not restart it
 (`RestartPreventExitStatus=78`); `systemctl status smartmeter` shows the reason. `Failed to load config file` names a key
-that does not exist (often a renamed one, e.g. `devices` → `meter`; keys renamed or removed in
-3.0.0 come with the fix, see [Upgrading to 3.0.0](#upgrading-to-300)) or a duration without unit;
+that does not exist (a renamed key fails with a hint) or a duration without unit;
 `config validation failed` names the invalid value. `bind: permission denied`
 for port 502 means `AmbientCapabilities=CAP_NET_BIND_SERVICE` is missing in the unit; `permission
 denied` on the serial port, that it is not in `DeviceAllow` or the user not in `dialout`.
@@ -730,7 +729,7 @@ plus a `checksums.txt` and a changelog. Versions follow [semantic versioning](ht
 a breaking change of the API or the configuration raises the major version.
 
 `smartmeter --version` reports the release a binary was built from. A local build reports something
-like `2.0.0-3-g0c13781-dirty` instead.
+like `4.0.1-3-g0c13781-dirty` instead.
 
 Building from source needs Go and `make`: clone the repository and run `make help` for the targets.
 
@@ -755,19 +754,6 @@ lives in the repository:
 6. Monitoring that polled `/ready` reads `ready` per meter and `connected` per RTU port from
    `/health` instead, with a token.
 7. A client limited to TLS 1.2 can no longer connect. The Modbus side is unchanged.
-
-### Upgrading to 3.0.0
-
-3.0.0 changes the configuration and the JSON of `/health` and `/registers`:
-
-| 2.x                                    | 3.0.0                                              |
-|----------------------------------------|----------------------------------------------------|
-| `meter.<name>.unitIDs`                 | `unitIds`                                          |
-| `meter.<name>.source.unitID`           | `unitId`                                           |
-| `listen.tcp.enabled`, `listen.rtu.enabled` | removed: a present block is active; delete or comment out the block to turn a listener off |
-| JSON `unitIDs` (`/health`), `unitID` (`/registers`) | `unitIds`, `unitId`                   |
-
-An old configuration file is refused with a message that names the new key.
 
 ---
 
