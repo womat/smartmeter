@@ -47,7 +47,7 @@ func testAppConfig(t *testing.T, modbusPort, webPort int) *Config {
 	}
 
 	cfg := NewConfig()
-	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/tokens"
+	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/token-hashes"
 	cfg.Webserver.Tokens = []web.Token{{Name: "test", Hash: web.HashToken("test-key")}}
 	cfg.Webserver.ListenHost = "127.0.0.1"
 	cfg.Webserver.ListenPort = webPort

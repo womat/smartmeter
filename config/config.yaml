@@ -37,7 +37,7 @@ webserver:
   # Bearer tokens accepted on the protected endpoints, one "<name> <sha256>" per line.
   # Manage it with "smartmeter token add|remove|list"; a relative path is relative to this file.
   # The file holds hashes only, but whoever can write it can add a token: owner root.
-  tokenFile: /opt/smartmeter/etc/tokens
+  tokenFile: /opt/smartmeter/etc/token-hashes
 
   # TLS private key file
   keyFile: /opt/smartmeter/etc/key.pem

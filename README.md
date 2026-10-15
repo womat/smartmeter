@@ -195,7 +195,7 @@ webserver:
   # Bearer tokens accepted on the protected endpoints, one "<name> <sha256>" per line.
   # Manage it with "smartmeter token add|remove|list"; a relative path is relative to this file.
   # The file holds hashes only, but whoever can write it can add a token: owner root.
-  tokenFile: /opt/smartmeter/etc/tokens
+  tokenFile: /opt/smartmeter/etc/token-hashes
 
   # TLS private key file
   keyFile: /opt/smartmeter/etc/key.pem
@@ -601,7 +601,7 @@ Every caller gets its own token: a browser, Node-RED, a script. smartmeter keeps
 hash of each, in the file named by `webserver.tokenFile`, one line per caller:
 
 ```
-# /opt/smartmeter/etc/tokens
+# /opt/smartmeter/etc/token-hashes
 browser  3f2a…c91e
 nodered  8b04…d7a2
 ```
@@ -741,7 +741,7 @@ lives in the repository:
 
 1. Make `/opt/smartmeter` root-owned as in the [Quick start](#quick-start).
 2. Put the new binary next to the old one as `bin/smartmeter.new`, and a copy of the config as
-   `etc/config.yaml.new` with `apiKey: …` replaced by `tokenFile: tokens`. The running 3.x is not
+   `etc/config.yaml.new` with `apiKey: …` replaced by `tokenFile: token-hashes`. The running 3.x is not
    touched by either.
 3. Create the tokens with the new binary: `sudo /opt/smartmeter/bin/smartmeter.new token add
    browser -config /opt/smartmeter/etc/config.yaml.new`. This only writes the token file; it

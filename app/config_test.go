@@ -23,7 +23,7 @@ func writeConfig(t *testing.T, content string) string {
 
 func validTestConfig(meters map[string]meters.MeterConfig) *Config {
 	cfg := NewConfig()
-	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/tokens"
+	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/token-hashes"
 	cfg.Meter = meters
 	return cfg
 }
@@ -37,7 +37,7 @@ func validTestMeter(unitIds ...uint8) meters.MeterConfig {
 }
 
 func TestLoadConfigExample(t *testing.T) {
-	// readConfig: the example names /opt/smartmeter/etc/tokens, which does not exist here.
+	// readConfig: the example names /opt/smartmeter/etc/token-hashes, which does not exist here.
 	cfg, err := readConfig("../config/config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestLoadConfigExplainsRenamedKeys(t *testing.T) {
 }
 
 func TestListenBlockPresenceAndDefaults(t *testing.T) {
-	base := "webserver:\n  tokenFile: /opt/smartmeter/etc/tokens\n"
+	base := "webserver:\n  tokenFile: /opt/smartmeter/etc/token-hashes\n"
 
 	cfg, err := readConfig(writeConfig(t, base))
 	if err != nil {
