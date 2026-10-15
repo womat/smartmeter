@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/womat/golib/web"
 	"github.com/womat/smartmeter/app"
 	"gopkg.in/yaml.v3"
 )
@@ -34,10 +35,26 @@ var (
 	buildCommit = "none"
 )
 
-// @securityDefinitions.apikey	ApiKeyAuth
+// @securityDefinitions.apikey	BearerAuth
 // @in							header
-// @name						X-API-Key
+// @name						Authorization
+// @description				A token from "smartmeter token add <name>", sent as "Bearer <token>".
 func main() {
+	defaultConfig := filepath.Join("/opt", app.MODULE, "etc", "config.yaml")
+	if envCfg := os.Getenv("CONFIG_FILE"); envCfg != "" {
+		defaultConfig = envCfg
+	}
+
+	// "smartmeter token add|remove|list" manages the bearer tokens in webserver.tokenFile.
+	if len(os.Args) > 1 && os.Args[1] == "token" {
+		os.Exit(web.TokenCommand{
+			App:           app.MODULE,
+			DefaultConfig: defaultConfig,
+			TokenFile:     app.TokenFile,
+			Apply:         "Apply with: systemctl reload " + app.MODULE,
+		}.Run(os.Args[2:]))
+	}
+
 	// Parse command line flags.
 	flags := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
@@ -46,11 +63,7 @@ func main() {
 	help := flags.Bool("help", false, "Print a help message and exit")
 	version := flags.Bool("version", false, "Print the app version and exit")
 	debug := flags.Bool("debug", false, "Enable debug logging to stdout (overrides log settings from the config file)")
-	configFile := flags.String("config", filepath.Join("/opt", app.MODULE, "etc", "config.yaml"), "Specify the path to the config file")
-
-	if envCfg := os.Getenv("CONFIG_FILE"); envCfg != "" {
-		*configFile = envCfg
-	}
+	configFile := flags.String("config", defaultConfig, "Specify the path to the config file")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		fmt.Println("Error parsing flags:", err)
@@ -120,10 +133,6 @@ func run(configFile string, debug bool) int {
 			_ = closeLog()
 			closeLog = closeNew
 			slog.Info("Logging initialized/reloaded", "logLevel", config.LogLevel)
-		}
-
-		for _, warning := range config.Warnings() {
-			slog.Warn("Configuration warning", "warning", warning)
 		}
 
 		// A SIGHUP restart only goes ahead when the config file still loads and validates;

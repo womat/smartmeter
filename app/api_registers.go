@@ -16,7 +16,7 @@ import (
 //	@Description	Returns the proprietary Fronius map (read by the inverter) and the SunSpec block (read by wallboxes and evcc) of a unit ID, each register with address, canonical field, type, scale factor, raw words and decoded value, from one consistent copy.
 //	@Tags			meters
 //	@Produce		json
-//	@Security		ApiKeyAuth
+//	@Security		BearerAuth
 //	@Param			unit	query		int					true	"Unit ID (1-247)"
 //	@Success		200		{object}	meters.RegisterDump	"Registers of the unit ID"
 //	@Failure		400		{object}	web.ApiError		"Invalid unit ID"

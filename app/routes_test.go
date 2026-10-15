@@ -16,7 +16,7 @@ import (
 func newTestApp(t *testing.T, meterConfigs map[string]meters.MeterConfig) *App {
 	t.Helper()
 	cfg := validTestConfig(meterConfigs)
-	cfg.Webserver.ApiKey = "test-key"
+	cfg.Webserver.Tokens = []web.Token{{Name: "test", Hash: web.HashToken("test-key")}}
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -29,11 +29,12 @@ func newTestApp(t *testing.T, meterConfigs map[string]meters.MeterConfig) *App {
 	return app
 }
 
-func serve(app *App, path, key string) *httptest.ResponseRecorder {
+// serve sends a GET for path, with token as bearer token unless it is empty.
+func serve(app *App, path, token string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.RemoteAddr = "127.0.0.1:1234"
-	if key != "" {
-		req.Header.Set("X-API-Key", key)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	rec := httptest.NewRecorder()
 	app.web.Handler.ServeHTTP(rec, req)
@@ -87,7 +88,7 @@ func TestWebPage(t *testing.T) {
 
 	rec := serve(app, "/", "")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<title>smartmeter</title>") {
-		t.Fatalf("GET / = %d, want the web page without an API key", rec.Code)
+		t.Fatalf("GET / = %d, want the web page without a token", rec.Code)
 	}
 	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self'") {
 		t.Errorf("Content-Security-Policy = %q, want requests limited to this server", csp)
@@ -100,7 +101,7 @@ func TestWebPage(t *testing.T) {
 
 func TestRegistersRoute(t *testing.T) {
 	cfg := validTestConfig(map[string]meters.MeterConfig{"primary_meter": validTestMeter(1, 200)})
-	cfg.Webserver.ApiKey = "test-key"
+	cfg.Webserver.Tokens = []web.Token{{Name: "test", Hash: web.HashToken("test-key")}}
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}

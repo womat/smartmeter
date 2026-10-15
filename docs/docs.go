@@ -19,7 +19,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Retrieves memory usage, goroutine count, version, hostname, Go runtime version, OS, per meter the unit IDs, the source, the served values, the time, age and read duration of the last valid snapshot, whether the unit IDs answer, the last error, the snapshots discarded as implausible and the limits for the web page, the state of the RTU port and the Modbus listeners with their request counters.",
@@ -79,7 +79,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Returns the proprietary Fronius map (read by the inverter) and the SunSpec block (read by wallboxes and evcc) of a unit ID, each register with address, canonical field, type, scale factor, raw words and decoded value, from one consistent copy.",
@@ -468,9 +468,10 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "ApiKeyAuth": {
+        "BearerAuth": {
+            "description": "A token from \"smartmeter token add \u003cname\u003e\", sent as \"Bearer \u003ctoken\u003e\".",
             "type": "apiKey",
-            "name": "X-API-Key",
+            "name": "Authorization",
             "in": "header"
         }
     }

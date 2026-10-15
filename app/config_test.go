@@ -23,7 +23,7 @@ func writeConfig(t *testing.T, content string) string {
 
 func validTestConfig(meters map[string]meters.MeterConfig) *Config {
 	cfg := NewConfig()
-	cfg.Webserver.ApiKey = "test"
+	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/tokens"
 	cfg.Meter = meters
 	return cfg
 }
@@ -37,7 +37,8 @@ func validTestMeter(unitIds ...uint8) meters.MeterConfig {
 }
 
 func TestLoadConfigExample(t *testing.T) {
-	cfg, err := LoadConfig("../config/config.yaml")
+	// readConfig: the example names /opt/smartmeter/etc/tokens, which does not exist here.
+	cfg, err := readConfig("../config/config.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,9 +100,9 @@ func TestLoadConfigExplainsRenamedKeys(t *testing.T) {
 }
 
 func TestListenBlockPresenceAndDefaults(t *testing.T) {
-	base := "webserver:\n  apiKey: 0123456789abcdef\n"
+	base := "webserver:\n  tokenFile: /opt/smartmeter/etc/tokens\n"
 
-	cfg, err := LoadConfig(writeConfig(t, base))
+	cfg, err := readConfig(writeConfig(t, base))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestListenBlockPresenceAndDefaults(t *testing.T) {
 		t.Errorf("listen = %+v without listen blocks, want no listener", cfg.Listen)
 	}
 
-	cfg, err = LoadConfig(writeConfig(t, base+"listen:\n  tcp: {}\n  rtu:\n    port: /dev/ttyS0\n"))
+	cfg, err = readConfig(writeConfig(t, base+"listen:\n  tcp: {}\n  rtu:\n    port: /dev/ttyS0\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestListenBlockPresenceAndDefaults(t *testing.T) {
 	}
 
 	// A present block must be complete: a forgotten port is an error, not a listener that is off.
-	cfg, err = LoadConfig(writeConfig(t, base+"listen:\n  rtu:\n    baudRate: 19200\n"))
+	cfg, err = readConfig(writeConfig(t, base+"listen:\n  rtu:\n    baudRate: 19200\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +150,12 @@ func TestLoadConfigEmptyFileGivesDefaults(t *testing.T) {
 
 func TestLoadConfigExpandsBracedVariablesOnly(t *testing.T) {
 	t.Setenv("SMARTMETER_TEST_KEY", "from-env")
-	cfg, err := LoadConfig(writeConfig(t, "webserver:\n  apiKey: ${SMARTMETER_TEST_KEY}\n  keyFile: /tmp/pa$word\n"))
+	cfg, err := LoadConfig(writeConfig(t, "webserver:\n  certFile: ${SMARTMETER_TEST_KEY}\n  keyFile: /tmp/pa$word\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Webserver.ApiKey != "from-env" {
-		t.Errorf("apiKey = %q, want the environment value", cfg.Webserver.ApiKey)
+	if cfg.Webserver.CertFile != "from-env" {
+		t.Errorf("certFile = %q, want the environment value", cfg.Webserver.CertFile)
 	}
 	if cfg.Webserver.KeyFile != "/tmp/pa$word" {
 		t.Errorf("keyFile = %q, a bare $ must be kept", cfg.Webserver.KeyFile)
@@ -231,19 +232,5 @@ func TestValidateMaxCurrent(t *testing.T) {
 	err := validTestConfig(map[string]meters.MeterConfig{"a": meter}).Validate()
 	if err == nil || !strings.Contains(err.Error(), "maxCurrent") {
 		t.Fatalf("Validate() error = %v, want maxCurrent error", err)
-	}
-}
-
-func TestWarningsWeakApiKey(t *testing.T) {
-	for key, want := range map[string]bool{
-		"changeme!":                  true,
-		"short":                      true,
-		"a-long-random-api-key-1234": false,
-	} {
-		cfg := NewConfig()
-		cfg.Webserver.ApiKey = key
-		if got := len(cfg.Warnings()) > 0; got != want {
-			t.Errorf("apiKey %q: warning = %v, want %v", key, got, want)
-		}
 	}
 }

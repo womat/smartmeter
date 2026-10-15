@@ -7,8 +7,8 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563a8'/%3E%3Cg fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='3.5' width='16' height='25' rx='3' stroke-width='2'/%3E%3Crect x='11' y='7' width='10' height='4.2' rx='1' stroke-width='1.6'/%3E%3Crect x='11' y='16' width='10' height='6' rx='1.4' stroke-width='1.6'/%3E%3C/g%3E%3Crect x='17.4' y='7.9' width='2.6' height='2.4' rx='.5' fill='%23ff4a3d'/%3E%3Crect x='15' y='17.4' width='2.2' height='3.2' fill='%23ff4a3d'/%3E%3C/svg%3E">
 <!--
   Web page of smartmeter, embedded in the binary and served at GET /.
-  It holds no data itself: it asks for the API key once, keeps it in localStorage and polls /health
-  with it, and /registers while the register view is open. Self-contained on purpose - no external
+  It holds no data itself: it asks for a token once, keeps it in localStorage and polls /health
+  with it as a bearer token, and /registers while the register view is open. Self-contained on purpose - no external
   fonts or scripts, the Pi may have no internet access.
 -->
 <style>
@@ -331,10 +331,10 @@ td.field.fixed { font-style: italic; }
   <section id="login" hidden>
     <form class="keybox" id="keyform">
       <h2>smartmeter</h2>
-      <p id="keyerr" class="err" hidden>The API key was rejected. Check webserver.apiKey in the config.</p>
-      <label for="apikey" class="label">API key</label>
-      <input id="apikey" type="password" autocomplete="current-password" placeholder="webserver.apiKey" required>
-      <p>Stored in this browser only and sent as X-API-Key.</p>
+      <p id="keyerr" class="err" hidden>The token was rejected. Check webserver.tokenFile on the Pi.</p>
+      <label for="apikey" class="label">Token</label>
+      <input id="apikey" type="password" autocomplete="current-password" placeholder="smartmeter token add browser" required>
+      <p>Stored in this browser only and sent as a bearer token.</p>
       <button type="submit">Connect</button>
     </form>
   </section>
@@ -728,7 +728,7 @@ function stale(reason) {
 }
 
 async function get(path) {
-  const r = await fetch(path, { headers: { "X-API-Key": apiKey }, cache: "no-store" });
+  const r = await fetch(path, { headers: { "Authorization": "Bearer " + apiKey }, cache: "no-store" });
   if (r.status === 401) throw Object.assign(new Error("unauthorized"), { auth: true });
   if (!r.ok) {
     let msg = `${path} answered ${r.status}`;

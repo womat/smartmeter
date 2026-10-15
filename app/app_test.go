@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/womat/golib/web"
 	"github.com/womat/mbserver"
 	"github.com/womat/smartmeter/app/service/meters"
 )
@@ -44,7 +45,8 @@ func testAppConfig(t *testing.T, modbusPort, webPort int) *Config {
 	}
 
 	cfg := NewConfig()
-	cfg.Webserver.ApiKey = "test-key"
+	cfg.Webserver.TokenFile = "/opt/smartmeter/etc/tokens"
+	cfg.Webserver.Tokens = []web.Token{{Name: "test", Hash: web.HashToken("test-key")}}
 	cfg.Webserver.ListenHost = "127.0.0.1"
 	cfg.Webserver.ListenPort = webPort
 	cfg.Webserver.CertFile = "/nonexistent/cert.pem" // embedded dev certificate (env dev)

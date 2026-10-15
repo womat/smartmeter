@@ -34,9 +34,10 @@ webserver:
   # Port the HTTPS server listens on
   listenPort: 8443
 
-  # Global API key for protected endpoints
-  # Can be taken from the environment, e.g. apiKey: ${SMARTMETER_API_KEY}
-  apiKey: changeme!
+  # Bearer tokens accepted on the protected endpoints, one "<name> <sha256>" per line.
+  # Manage it with "smartmeter token add|remove|list"; a relative path is relative to this file.
+  # The file holds hashes only, but whoever can write it can add a token: owner root.
+  tokenFile: /opt/smartmeter/etc/tokens
 
   # TLS private key file
   keyFile: /opt/smartmeter/etc/key.pem
