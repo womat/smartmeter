@@ -9,17 +9,16 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/womat/golib/web"
+	"github.com/womat/golib/xlog"
 	"github.com/womat/smartmeter/app"
 	"gopkg.in/yaml.v3"
 )
@@ -91,9 +90,12 @@ func main() {
 // It supports hot-reloading of the configuration and handles graceful shutdown.
 func run(configFile string, debug bool) int {
 
-	// closeLog releases the current log file, if logging goes to one.
-	closeLog := func() error { return nil }
-	defer func() { _ = closeLog() }()
+	var logger *xlog.LoggerWrapper
+	defer func() {
+		if logger != nil {
+			_ = logger.Close()
+		}
+	}()
 
 	fmt.Printf("Starting %s %s\n", app.MODULE, app.VERSION)
 	fmt.Printf("Loading configuration from: %s\n", configFile)
@@ -118,10 +120,10 @@ func run(configFile string, debug bool) int {
 	var lastGood *app.Config
 
 	for {
-		// Switch to the new logger before closing the previous log file, so no line written
-		// in between goes to a file that is already closed. A log destination that cannot be
-		// opened on a reload keeps the current logger.
-		logger, closeNew, err := newLogger(config.LogDestination, config.LogLevel)
+		// Switch to the new logger before closing the previous one, so no line written
+		// in between goes to a file that is already closed. A log destination that cannot
+		// be opened on a reload keeps the current logger.
+		newLogger, err := xlog.Init(config.LogDestination, config.LogLevel)
 		switch {
 		case err != nil && lastGood == nil:
 			fmt.Printf("Failed to initialize logger: %s\n", err.Error())
@@ -129,9 +131,14 @@ func run(configFile string, debug bool) int {
 		case err != nil:
 			slog.Error("Failed to initialize logger, keeping the current one", "error", err)
 		default:
-			slog.SetDefault(logger)
-			_ = closeLog()
-			closeLog = closeNew
+			slog.SetDefault(newLogger.Logger)
+			if logger != nil {
+				// Reported through the new logger, which is already in place.
+				if err := logger.Close(); err != nil {
+					slog.Warn("Failed to close the previous log destination", "error", err)
+				}
+			}
+			logger = newLogger
 			slog.Info("Logging initialized/reloaded", "logLevel", config.LogLevel)
 		}
 
@@ -213,43 +220,4 @@ func loadConfig(configFile string, debug bool) (*app.Config, error) {
 	}
 
 	return config, nil
-}
-
-// newLogger returns a text logger writing to dest - "stdout", "stderr", "null" or a file path,
-// opened for appending - at the given level (debug, info, warn/warning, error; anything else
-// is info). Source locations are added at debug level only. The returned function closes the
-// log file and is a no-op for the other destinations.
-func newLogger(dest, level string) (*slog.Logger, func() error, error) {
-	var out io.Writer
-	closeFn := func() error { return nil }
-
-	switch strings.ToLower(strings.TrimSpace(dest)) {
-	case "stdout":
-		out = os.Stdout
-	case "stderr":
-		out = os.Stderr
-	case "null":
-		out = io.Discard
-	default:
-		file, err := os.OpenFile(dest, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
-		if err != nil {
-			return nil, nil, err
-		}
-		out, closeFn = file, file.Close
-	}
-
-	var lvl slog.Level
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "warn", "warning":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	default:
-		lvl = slog.LevelInfo
-	}
-
-	handler := slog.NewTextHandler(out, &slog.HandlerOptions{AddSource: lvl == slog.LevelDebug, Level: lvl})
-	return slog.New(handler), closeFn, nil
 }
