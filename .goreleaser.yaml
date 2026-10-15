@@ -62,6 +62,7 @@ archives:
       - README.md
       - LICENSE
       - config/config.yaml
+      - contrib/smartmeter.service
 
 checksum:
   name_template: checksums.txt

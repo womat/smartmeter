@@ -1,0 +1,83 @@
+# systemd unit for smartmeter.
+#
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin smartmeter
+#   sudo usermod -aG dialout smartmeter
+#   sudo install -d -o root -g root -m 0755 /opt/smartmeter /opt/smartmeter/bin
+#   sudo install -d -o root -g smartmeter -m 0750 /opt/smartmeter/etc
+#   sudo install -o root -g root -m 0755 smartmeter /opt/smartmeter/bin/smartmeter
+#   sudo install -o root -g smartmeter -m 0640 config/config.yaml /opt/smartmeter/etc/config.yaml
+#   sudo cp contrib/smartmeter.service /etc/systemd/system/
+#   sudo /opt/smartmeter/bin/smartmeter token add browser
+#   sudo systemctl enable --now smartmeter
+#
+# Everything under /opt/smartmeter belongs to root; the group smartmeter may only read
+# etc/. smartmeter writes nothing to disk, so the service user needs no write access
+# anywhere - and must not have it: whoever can write config.yaml or the token file can
+# add a token of their own, and whoever can write bin/smartmeter can replace the program.
+# key.pem goes in as root:smartmeter 0640, cert.pem as 0644.
+#
+# "systemctl reload smartmeter" rereads config.yaml and the token file. A config that
+# does not load or validate ends smartmeter with exit code 78, and
+# RestartPreventExitStatus keeps systemd from restarting it until the file is fixed:
+# "systemctl status smartmeter" shows why.
+#
+# The sandbox: smartmeter needs the network (Modbus TCP, HTTPS), the right to bind
+# port 502 and the serial port of listen.rtu, nothing else. Another serial port than
+# /dev/ttyS0 (e.g. /dev/ttyUSB0) goes into DeviceAllow instead, see
+# "systemctl edit smartmeter". "systemd-analyze security smartmeter" rates the result.
+#
+# A password in config.yaml can come from the environment as ${VAR}: put it in
+# /opt/smartmeter/etc/smartmeter.env (root:root 0600) and add
+#   EnvironmentFile=/opt/smartmeter/etc/smartmeter.env
+# to [Service].
+
+[Unit]
+Description=smartmeter - Fronius Smart Meter emulator for any Modbus TCP/RTU meter
+Documentation=https://github.com/womat/smartmeter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smartmeter
+Group=smartmeter
+ExecStart=/opt/smartmeter/bin/smartmeter
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=78
+
+# Modbus TCP on port 502 needs this one capability, nothing else.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+UMask=0077
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+# Only the serial port of listen.rtu; PrivateDevices=yes would hide it.
+DevicePolicy=closed
+DeviceAllow=/dev/ttyS0 rw
+
+[Install]
+WantedBy=multi-user.target
