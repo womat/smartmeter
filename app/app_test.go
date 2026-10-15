@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/womat/golib/web"
 	"github.com/womat/mbserver"
+	"github.com/womat/smartmeter/app/service/health"
 	"github.com/womat/smartmeter/app/service/meters"
 )
 
@@ -63,20 +65,30 @@ func testAppConfig(t *testing.T, modbusPort, webPort int) *Config {
 	return cfg
 }
 
+// waitReady waits until /health reports every meter with current values.
 func waitReady(t *testing.T, webPort int) {
 	t.Helper()
 	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	req, err := http.NewRequest(http.MethodGet, "https://127.0.0.1:"+strconv.Itoa(webPort)+"/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer test-key")
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		resp, err := client.Get("https://127.0.0.1:" + strconv.Itoa(webPort) + "/ready")
-		if err == nil {
+		if resp, err := client.Do(req); err == nil {
+			var h health.Model
+			ok := resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&h) == nil && len(h.Meters) > 0
 			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
+			for _, st := range h.Meters {
+				ok = ok && st.Ready
+			}
+			if ok {
 				return
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("/ready did not answer 200: %v", err)
+			t.Fatal("/health did not report every meter ready")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

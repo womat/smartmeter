@@ -95,7 +95,14 @@ func TestPollingEndToEnd(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	waitUntil("the first snapshot", func() bool { return client.Ready(time.Now()) == nil })
+	waitUntil("the first snapshot", func() bool {
+		for _, st := range client.Status(time.Now()) {
+			if !st.Ready {
+				return false
+			}
+		}
+		return true
+	})
 
 	read32 := func(unit uint8, addr uint16) uint32 {
 		regs, err := server.server.HoldingRegisters(unit, addr, 2)

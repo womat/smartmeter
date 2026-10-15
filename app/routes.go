@@ -1,6 +1,6 @@
 package app
 
-// HTTP routes and global middleware. The web page at /, /version and /ready are public;
+// HTTP routes and global middleware. The web page at / and /version are public;
 // /health and /registers require a bearer token from the token file. Swagger UI is registered only in
 // builds with the swagger tag. Middleware, outermost first: logging, IP filter, CORS.
 
@@ -26,7 +26,6 @@ func (app *App) SetupRoutes() {
 	// Public routes. {$} matches / only, so the page does not catch unknown paths.
 	mux.Handle("GET /{$}", app.HandleUI())
 	mux.Handle("GET /version", app.HandleVersion())
-	mux.Handle("GET /ready", app.HandleReady())
 
 	// Protected routes
 	mux.Handle("GET /health", web.WithAuth(app.HandleHealth(), webCfg))

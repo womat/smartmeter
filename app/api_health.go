@@ -1,10 +1,9 @@
 package app
 
-// HTTP handlers for health and readiness: /health returns runtime metrics and the state of
-// every meter, /ready is a readiness probe for monitoring.
+// HTTP handler for /health: runtime metrics and the state of every meter, the RTU port and the
+// Modbus listeners.
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -32,31 +31,4 @@ func (app *App) HandleHealth() http.Handler {
 			web.Encode(w, http.StatusOK, resp)
 		},
 	)
-}
-
-// HandleReady is a readiness probe for monitoring.
-// It returns 200 OK while every meter serves current values, and 503 Service Unavailable
-// while a meter has delivered no valid snapshot for three poll intervals, because the
-// inverter and the other clients then read outdated values, or while the RTU port is not
-// available, because the inverter then gets no values at all.
-//
-//	@Summary		Readiness check
-//	@Description	Returns 200 while every meter serves current values and the RTU port is available, 503 while a meter has delivered no valid snapshot for three poll intervals or the RTU port is not available. No authentication required.
-//	@Tags			info
-//	@Produce		json
-//	@Success		200	{object}	map[string]string	"Application is ready"
-//	@Failure		503	{object}	web.ApiError		"Values of a meter are outdated"
-//	@Router			/ready [get]
-func (app *App) HandleReady() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := errors.Join(app.modbusClient.Ready(time.Now()), app.modbusServer.Ready())
-		if err != nil {
-			// Not WriteError: from 500 on it replaces the message with "internal server error",
-			// but a readiness probe should say why the service is not ready.
-			web.Encode(w, http.StatusServiceUnavailable, web.NewApiError(err))
-			return
-		}
-
-		web.Encode(w, http.StatusOK, map[string]string{"status": "ready"})
-	})
 }

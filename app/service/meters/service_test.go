@@ -394,19 +394,17 @@ func TestSmartfoxSingleReadBlock(t *testing.T) {
 	}
 }
 
-func TestStatusAndReady(t *testing.T) {
+// Ready in the status is what /health and the web page show as current or outdated.
+func TestStatusReady(t *testing.T) {
 	device := &compiledDevice{Config: MeterConfig{Name: "m", UnitIds: []uint8{1}, Poll: PollConfig{Interval: time.Second}}}
 	service := &ModbusService{devices: []*compiledDevice{device}}
 	now := time.Now()
 
-	if err := service.Ready(now); err == nil {
-		t.Error("Ready() = nil before the first snapshot, want an error")
+	if service.Status(now)["m"].Ready {
+		t.Error("ready before the first snapshot")
 	}
 
 	device.lastSuccess = now.Add(-2 * time.Second)
-	if err := service.Ready(now); err != nil {
-		t.Errorf("Ready() = %v with a 2 s old snapshot, want nil", err)
-	}
 
 	device.recordError(errors.New("spike"), true)
 	st := service.Status(now)["m"]
@@ -414,8 +412,8 @@ func TestStatusAndReady(t *testing.T) {
 		t.Errorf("Status() = %+v, want ready, 1 discarded, lastError spike, age 2", st)
 	}
 
-	if err := service.Ready(now.Add(2 * time.Second)); err == nil {
-		t.Error("Ready() = nil with a 4 s old snapshot at 1 s interval, want an error")
+	if service.Status(now.Add(2 * time.Second))["m"].Ready {
+		t.Error("ready with a 4 s old snapshot at 1 s interval")
 	}
 }
 

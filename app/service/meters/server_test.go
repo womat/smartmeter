@@ -158,22 +158,10 @@ func TestServerCloseReleasesPortAndClients(t *testing.T) {
 	}
 }
 
-func TestSerialReady(t *testing.T) {
-	since := time.Date(2026, 10, 8, 22, 0, 0, 0, time.UTC)
-	if err := serialReady(nil); err != nil {
-		t.Errorf("serialReady(nil) = %v, want nil without RTU listener", err)
-	}
-	if err := serialReady([]SerialStatus{{Port: "/dev/ttyS0", Connected: true, Since: since}}); err != nil {
-		t.Errorf("serialReady(connected) = %v, want nil", err)
-	}
-	err := serialReady([]SerialStatus{{Port: "/dev/ttyUSB0", Error: "no such device", Since: since}})
-	if err == nil || err.Error() != "serial port /dev/ttyUSB0 not available since 2026-10-08T22:00:00Z: no such device" {
-		t.Errorf("serialReady(disconnected) = %v", err)
-	}
-
+func TestNilServerHasNoStatus(t *testing.T) {
 	var none *ModbusServerService
-	if none.Status() != nil || none.Ready() != nil {
-		t.Error("a missing server must report no RTU port and be ready")
+	if none.Status() != nil {
+		t.Error("a missing server must report no RTU port")
 	}
 }
 

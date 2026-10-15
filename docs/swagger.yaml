@@ -247,27 +247,6 @@ paths:
       summary: Get health data
       tags:
       - info
-  /ready:
-    get:
-      description: Returns 200 while every meter serves current values and the RTU
-        port is available, 503 while a meter has delivered no valid snapshot for three
-        poll intervals or the RTU port is not available. No authentication required.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Application is ready
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "503":
-          description: Values of a meter are outdated
-          schema:
-            $ref: '#/definitions/web.ApiError'
-      summary: Readiness check
-      tags:
-      - info
   /registers:
     get:
       description: Returns the proprietary Fronius map (read by the inverter) and

@@ -35,35 +35,6 @@
                 }
             }
         },
-        "/ready": {
-            "get": {
-                "description": "Returns 200 while every meter serves current values and the RTU port is available, 503 while a meter has delivered no valid snapshot for three poll intervals or the RTU port is not available. No authentication required.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "info"
-                ],
-                "summary": "Readiness check",
-                "responses": {
-                    "200": {
-                        "description": "Application is ready",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "503": {
-                        "description": "Values of a meter are outdated",
-                        "schema": {
-                            "$ref": "#/definitions/web.ApiError"
-                        }
-                    }
-                }
-            }
-        },
         "/registers": {
             "get": {
                 "security": [

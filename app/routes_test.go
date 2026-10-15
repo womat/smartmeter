@@ -49,7 +49,6 @@ func TestPublicAndProtectedRoutes(t *testing.T) {
 		code      int
 	}{
 		{"/version", "", http.StatusOK},
-		{"/ready", "", http.StatusOK}, // no meters: nothing can be outdated
 		{"/health", "", http.StatusUnauthorized},
 		{"/health", "test-key", http.StatusOK},
 	} {
@@ -59,17 +58,11 @@ func TestPublicAndProtectedRoutes(t *testing.T) {
 	}
 }
 
-func TestReadyAndHealthReportMeterState(t *testing.T) {
+func TestHealthReportsMeterState(t *testing.T) {
 	app := newTestApp(t, map[string]meters.MeterConfig{"primary_meter": validTestMeter(1, 200)})
 
 	// Compiled but never polled: the meter has no current values.
-	rec := serve(app, "/ready", "")
-	var apiErr web.ApiError
-	if rec.Code != http.StatusServiceUnavailable || json.Unmarshal(rec.Body.Bytes(), &apiErr) != nil || apiErr.Error == "" {
-		t.Errorf("GET /ready = %d %s, want 503 with a reason", rec.Code, rec.Body)
-	}
-
-	rec = serve(app, "/health", "test-key")
+	rec := serve(app, "/health", "test-key")
 	if !strings.Contains(rec.Body.String(), `"unitIds":[1,200]`) {
 		t.Errorf("GET /health body = %s, want unitIds as a JSON array of numbers", rec.Body)
 	}

@@ -175,21 +175,6 @@ func (s *ModbusServerService) Status() []SerialStatus {
 	return status
 }
 
-// Ready reports an error while the RTU port is not connected: the inverter then gets no
-// values at all.
-func (s *ModbusServerService) Ready() error {
-	return serialReady(s.Status())
-}
-
-func serialReady(status []SerialStatus) error {
-	for _, st := range status {
-		if !st.Connected {
-			return fmt.Errorf("serial port %s not available since %s: %s", st.Port, st.Since.Format(time.RFC3339), st.Error)
-		}
-	}
-	return nil
-}
-
 // Close stops the listeners and disconnects all clients, so the next server can bind the
 // same port and serial line.
 func (s *ModbusServerService) Close() error {

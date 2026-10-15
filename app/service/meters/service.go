@@ -191,24 +191,6 @@ func (s *ModbusService) Status(now time.Time) map[string]MeterStatus {
 	return status
 }
 
-// Ready reports an error while a meter has not delivered a valid snapshot within
-// staleAfter poll intervals: the Modbus server then serves outdated values.
-func (s *ModbusService) Ready(now time.Time) error {
-	if s == nil {
-		return nil
-	}
-	var stale []string
-	for _, device := range s.devices {
-		if !device.status(now).Ready {
-			stale = append(stale, device.Config.Name)
-		}
-	}
-	if len(stale) > 0 {
-		return fmt.Errorf("no current values from meter %s", strings.Join(stale, ", "))
-	}
-	return nil
-}
-
 func (s *ModbusService) closeReaders(readers []registerReader) error {
 	var errs error
 	for _, reader := range readers {
