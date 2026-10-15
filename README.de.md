@@ -26,7 +26,9 @@ eingefrorenen Werten zu regeln. Bricht die Verbindung zur Quelle ab, verbindet s
 nächsten Abfrageintervall selbst neu.
 
 Unter `https://<dein-pi>:8443/` zeigt eine Web-Seite Energiefluss, Leistung, Phasen, Zählerstände
-und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein Internet.
+und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein Internet. Die
+**HTTPS-REST-API** (TLS 1.3) verlangt einen eigenen Token je Aufrufer; smartmeter speichert davon
+nur den SHA-256-Hash und schreibt ins Log, wer zugreift.
 
 ## In fünf Schritten
 
@@ -35,15 +37,23 @@ und die ausgelieferten Register; sie ist im Programm enthalten und braucht kein 
    `armv7` für 32-Bit-Systeme, `arm64` für 64-Bit-Systeme.
 2. **Installieren:** System-User `smartmeter` (Gruppe `dialout` für die serielle Schnittstelle)
    anlegen, Programm und `config.yaml` nach `/opt/smartmeter` kopieren, Zertifikat erzeugen.
-3. **Konfigurieren:** API-Key, serielle Schnittstelle des RS485-Adapters und Adresse des
-   Quellzählers samt Registerzuordnung.
+   Alles gehört root, der Dienst darf `etc/` nur lesen – wer Konfiguration oder Token-Datei
+   schreiben kann, kann sich selbst einen Token eintragen.
+3. **Konfigurieren:** `env: prod`, serielle Schnittstelle des RS485-Adapters und Adresse des
+   Quellzählers samt Registerzuordnung. Dann je Aufrufer einen Token anlegen, z. B.
+   `sudo /opt/smartmeter/bin/smartmeter token add browser`; er wird nur dieses eine Mal
+   angezeigt, siehe [Tokens](README.md#tokens).
 4. **Anschließen:** RS485-Adapter an den Zählereingang des Wechselrichters (D+ an D+, D− an D−,
    Abschluss 120 Ω); im Wechselrichter einen Fronius Smart Meter auf Modbus RTU, Adresse 1,
    9600 Baud einstellen. Am Raspberry Pi die UART `/dev/ttyS0` verwenden und
    `interFrameDelay: 20ms` aus der Beispiel-Config übernehmen, sonst kommen einzelne Anfragen
    zerteilt an.
-5. **Starten:** als systemd-Dienst, dann `https://<dein-pi>:8443/ready` prüfen oder die Web-Seite
-   `https://<dein-pi>:8443/` öffnen.
+5. **Starten:** mit der Unit aus dem Archiv (`contrib/smartmeter.service`, läuft abgeschottet),
+   dann `https://<dein-pi>:8443/` im Browser öffnen und den Token eingeben.
+
+**Von 3.x auf 4.0.0:** `apiKey` gibt es nicht mehr, stattdessen `tokenFile` und
+`smartmeter token add`; HTTPS nur noch mit TLS 1.3, `/ready` ist entfallen. Die Schritte stehen
+unter [Upgrading to 4.0.0](README.md#upgrading-to-400).
 
 Die genauen Befehle stehen im [Quick start](README.md#quick-start), alle Einstellungen unter
 [Configuration](README.md#configuration), die Herkunft der Registertabellen unter

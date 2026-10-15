@@ -9,6 +9,9 @@
 
 ```text
 smartmeter [--config FILE] [--debug] [--version] [--about] [--help]
+smartmeter token add <name> [--config FILE] [--dry-run]
+smartmeter token remove <name> [--config FILE] [--dry-run]
+smartmeter token list [--config FILE]
 ```
 
 ---
@@ -39,6 +42,24 @@ smartmeter --version
 CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
 ```
 
+`SIGHUP` reloads the configuration and the token file; a file that does not load or validate is
+refused and the running configuration stays. A config that does not load or validate at start ends
+smartmeter with exit code 78.
+
+---
+
+## Tokens
+
+`/health` and `/registers` need `Authorization: Bearer <token>`. smartmeter keeps only the SHA-256
+hash of each token, in the file named by `webserver.tokenFile`, one `<name> <hash>` per line.
+
+- `smartmeter token add <name>` writes the hash and prints the token once, on stdout alone.
+- `smartmeter token remove <name>` deletes it, `smartmeter token list` prints the names.
+- `--dry-run` prints what would be done and writes nothing.
+- `systemctl reload smartmeter` applies a change.
+
+Run them with `sudo`: the token file belongs to root.
+
 ---
 
 ## Configuration
@@ -46,7 +67,7 @@ CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
 The configuration file is a YAML file. By default it is loaded from `/opt/smartmeter/etc/config.yaml`.
 
 Environment variables are expanded inside the file in the `${VAR}` form only, e.g.
-`apiKey: ${SMARTMETER_API_KEY}`. Unknown keys are rejected.
+`host: ${METER_HOST}`. Unknown keys are rejected.
 
 Every key is documented in the example configuration (`config/config.yaml`) and in the project
 README: <https://github.com/womat/smartmeter#configuration>.

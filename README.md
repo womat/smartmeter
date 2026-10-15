@@ -49,10 +49,11 @@ the same time, so all clients see the same values from the same moment.
 - **Block reads**: neighbouring registers are fetched with one request
 - **Consistent reads**: a client never sees a 32-bit value half updated
 - **Robust RS485**: a failed serial port (e.g. an unplugged USB adapter) is reopened
-  automatically, and `/ready` reports it meanwhile
+  automatically, and `/health` reports it meanwhile
 - **Web page** with energy flow, power, phases, counters and the served registers, embedded in the
   binary and usable offline
-- **HTTPS REST API** with API key, IP allowlist / blocklist, readiness probe
+- **HTTPS REST API** (TLS 1.3) with one bearer token per caller, stored only as a SHA-256 hash and
+  managed with `smartmeter token`; IP allowlist / blocklist; the log names who calls
 - **Hot reload** of the configuration via `SIGHUP`; a broken file is refused, the emulation goes on
 - Release builds for every Raspberry Pi architecture, from the **Pi Zero (ARMv6)** to 64-bit systems
 
@@ -76,60 +77,54 @@ sha256sum -c checksums.txt --ignore-missing
 tar xzf smartmeter_${VERSION}_linux_$ARCH.tar.gz
 ```
 
-**2. Install** binary, example configuration and a certificate. The service user needs the
-`dialout` group for the serial port:
+**2. Install** binary, example configuration and a certificate. Everything belongs to root; the
+service user `smartmeter` may read `etc/` and write nothing. It needs the `dialout` group for the
+serial port:
 
 ```sh
 sudo groupadd -r -f smartmeter
 sudo useradd -r -s /usr/sbin/nologin -g smartmeter smartmeter
 sudo usermod -aG dialout smartmeter
-sudo mkdir -p /opt/smartmeter/{bin,etc}
+sudo install -d -o root -g root -m 755 /opt/smartmeter /opt/smartmeter/bin
+sudo install -d -o root -g smartmeter -m 750 /opt/smartmeter/etc
 
-sudo install -m 755 smartmeter /opt/smartmeter/bin/
-sudo install -m 640 config/config.yaml /opt/smartmeter/etc/
+sudo install -o root -g root -m 755 smartmeter /opt/smartmeter/bin/
+sudo install -o root -g smartmeter -m 640 config/config.yaml /opt/smartmeter/etc/
 sudo openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
   -keyout /opt/smartmeter/etc/key.pem -out /opt/smartmeter/etc/cert.pem -subj "/CN=$(hostname)"
-sudo chown -R smartmeter:smartmeter /opt/smartmeter
+sudo chown root:smartmeter /opt/smartmeter/etc/key.pem /opt/smartmeter/etc/cert.pem
+sudo chmod 640 /opt/smartmeter/etc/key.pem
 ```
 
-**3. Configure** `/opt/smartmeter/etc/config.yaml`: set `env: prod`, a random `apiKey`
-(`openssl rand -hex 24`), the serial port of the RS485 adapter and the address of your upstream
-meter — see [Configuration](#configuration).
+Why root: whoever can write `config.yaml` or the token file can add a token of their own, and
+whoever can write `bin/smartmeter` can replace the program. smartmeter itself needs neither.
 
-**4. Start** it as a service:
+**3. Configure** `/opt/smartmeter/etc/config.yaml`: set `env: prod`, the serial port of the RS485
+adapter and the address of your upstream meter — see [Configuration](#configuration). Then create
+a token for each caller, here the browser:
 
 ```sh
-sudo tee /etc/systemd/system/smartmeter.service > /dev/null <<'EOF'
-[Unit]
-Description=smartmeter — Fronius Smart Meter emulator
-After=network-online.target
-Wants=network-online.target
+sudo /opt/smartmeter/bin/smartmeter token add browser
+```
 
-[Service]
-User=smartmeter
-Group=smartmeter
-Type=simple
-ExecStart=/opt/smartmeter/bin/smartmeter
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=5
-# Binding port 502 (Modbus TCP) needs this capability as a non-root user.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+It prints the token once; keep it, e.g. in a password manager. See [Tokens](#tokens).
 
-[Install]
-WantedBy=multi-user.target
-EOF
+**4. Start** it as a service, with the unit from the archive:
 
+```sh
+sudo install -m 644 contrib/smartmeter.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now smartmeter
 journalctl -u smartmeter -n 20      # "Module started successfully"
 ```
 
-To keep the API key out of the config file, write `apiKey: ${SMARTMETER_API_KEY}` and add
-`Environment=SMARTMETER_API_KEY=...` (or an `EnvironmentFile=`) to the `[Service]` section.
+The unit runs smartmeter in a sandbox: `CAP_NET_BIND_SERVICE` for port 502 as the only capability,
+a read-only system, only `/dev/ttyS0` as a device. For another serial port, e.g. `/dev/ttyUSB0`,
+change `DeviceAllow` with `sudo systemctl edit smartmeter`.
 
-**5. Check** that the values are current: `curl -k https://<your-pi>:8443/ready` answers
-`{"status":"ready"}`, and the inverter's web interface shows the meter.
+**5. Check** that the values are current: open `https://<your-pi>:8443/`, accept the self-signed
+certificate and enter the token — the meter shows *Ready* — and the inverter's web interface shows
+the meter.
 
 ---
 
@@ -155,7 +150,8 @@ To keep the API key out of the config file, write `apiKey: ${SMARTMETER_API_KEY}
 
 The configuration file is a YAML file, by default `/opt/smartmeter/etc/config.yaml`. Unknown keys are
 an error, so a misspelled key cannot silently fall back to its default. Environment variables are
-expanded in the `${VAR}` form only. Durations are Go duration strings (`300ms`, `1s`).
+expanded in the `${VAR}` form only, e.g. for a password; put it in an `EnvironmentFile=` of the
+unit (root, `0600`), not in the config. Durations are Go duration strings (`300ms`, `1s`).
 
 The example configures a [Smartfox Pro](https://smartfox.at) as upstream meter:
 
@@ -196,9 +192,10 @@ webserver:
   # Port the HTTPS server listens on
   listenPort: 8443
 
-  # Global API key for protected endpoints
-  # Can be taken from the environment, e.g. apiKey: ${SMARTMETER_API_KEY}
-  apiKey: changeme!
+  # Bearer tokens accepted on the protected endpoints, one "<name> <sha256>" per line.
+  # Manage it with "smartmeter token add|remove|list"; a relative path is relative to this file.
+  # The file holds hashes only, but whoever can write it can add a token: owner root.
+  tokenFile: /opt/smartmeter/etc/tokens
 
   # TLS private key file
   keyFile: /opt/smartmeter/etc/key.pem
@@ -502,20 +499,19 @@ The documents count from 1: register 40001 there is address 40000 here.
 
 | Method | Path                | Auth    | Description                                                     |
 |--------|---------------------|---------|-----------------------------------------------------------------|
-| GET    | `/`                 | —       | Web page; it asks for the API key and reads the endpoints below  |
+| GET    | `/`                 | —       | Web page; it asks for a token and reads the endpoints below     |
 | GET    | `/version`          | —       | Application name and version                                    |
-| GET    | `/ready`            | —       | Readiness probe: 200, or 503 while a meter has delivered no valid values for three poll intervals or the RTU port is not available |
-| GET    | `/health`           | API Key | Runtime metrics, every meter with its served values, the Modbus listeners |
-| GET    | `/registers?unit=N` | API Key | Both register maps of unit ID N as a client reads them          |
+| GET    | `/health`           | Token   | Runtime metrics, every meter with its served values, the Modbus listeners |
+| GET    | `/registers?unit=N` | Token   | Both register maps of unit ID N as a client reads them          |
 
-Authentication via the `X-API-Key` header. Errors are returned as `{"error": "..."}` with the HTTP
-status.
+Authentication with a bearer token from `smartmeter token add`: `Authorization: Bearer <token>`.
+HTTPS is TLS 1.3 only. Errors are returned as `{"error": "..."}` with the HTTP status (401 without
+a valid token).
 
 ```sh
 curl -k https://localhost:8443/version
-curl -k https://localhost:8443/ready
-curl -k -H "X-API-Key: your-api-key" https://localhost:8443/health
-curl -k -H "X-API-Key: your-api-key" "https://localhost:8443/registers?unit=1"
+curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/health
+curl -k -H "Authorization: Bearer $TOKEN" "https://localhost:8443/registers?unit=1"
 ```
 
 `/health` reports, besides the runtime metrics, per meter, the state of the RTU port and the Modbus
@@ -570,8 +566,9 @@ taken from one consistent copy.
 - The logo turns like the disc of a Ferraris meter: forward on import, backward on export, faster
   with more power, still while the values are frozen.
 
-The page is part of the binary and loads nothing from the internet. It asks for the API key once and
-keeps it in the browser (`localStorage`). The bars are scaled by `limits` in the meter configuration.
+The page is part of the binary and loads nothing from the internet. It asks for a token once
+(`smartmeter token add browser`), keeps it in the browser (`localStorage`) and sends it as a bearer
+token; a rejected token brings the prompt back. The bars are scaled by `limits` in the meter configuration.
 
 ---
 
@@ -585,13 +582,54 @@ keeps it in the browser (`localStorage`). The bars are scaled by `limits` in the
 | `--about`   | `false`                           | Print application details and exit                                  |
 | `--help`    | `false`                           | Print this help message and exit                                    |
 
-The config file path can also be set via the environment variable `CONFIG_FILE`.
+`smartmeter token add|remove|list` manages the bearer tokens, see [Tokens](#tokens).
+
+The config file path can also be set via the environment variable `CONFIG_FILE`; `--config` wins
+over it.
 
 ```bash
 smartmeter --config /etc/smartmeter/config.yaml
 smartmeter --debug
 CONFIG_FILE=/etc/smartmeter/config.yaml smartmeter
 ```
+
+---
+
+## Tokens
+
+Every caller gets its own token: a browser, Node-RED, a script. smartmeter keeps only the SHA-256
+hash of each, in the file named by `webserver.tokenFile`, one line per caller:
+
+```
+# /opt/smartmeter/etc/tokens
+browser  3f2a…c91e
+nodered  8b04…d7a2
+```
+
+The token itself exists only with the caller. Whoever reads the file cannot call smartmeter with
+it, so it needs no more protection than the config — but whoever can **write** it can add a token
+of their own: keep it `root:smartmeter 0640`, like `config.yaml`.
+
+| Command | Does |
+|---|---|
+| `sudo smartmeter token add <name>` | Writes the hash, then prints the token once, on stdout alone |
+| `sudo smartmeter token add <name> -dry-run` | Prints token and line, writes nothing |
+| `sudo smartmeter token remove <name>` | Deletes the line |
+| `sudo smartmeter token list` | Prints the names, never a hash |
+| `sudo systemctl reload smartmeter` | Applies a change |
+
+`-config` works as for the service. A new token file gets `0640` and the owner and group of
+`config.yaml`. `add` refuses a name that is taken and prints no token when it cannot write the
+file, so a token that is shown but stored nowhere cannot happen. A name is 1–64 letters, digits,
+`.`, `_` or `-`.
+
+**Rotating without a gap:** `smartmeter token add nodered-2`, move the caller to the new token,
+`smartmeter token remove nodered`, reload. A lost token is not recovered but replaced the same way.
+
+**In the log:** at start and after every reload smartmeter names the tokens it accepts
+(`Bearer tokens loaded … names=[browser nodered]`). The first request of each caller from each
+address is logged at info (`user=browser request.client=… firstAccess=true`), every rejected one
+as a warning with its address; the requests in between, the web page polls every 2 s, at debug.
 
 ---
 
@@ -621,7 +659,8 @@ The new configuration is loaded and validated **before** anything is torn down. 
 reload is refused with `Config reload rejected, keeping the running configuration` and the service
 keeps running. If the new settings only fail on start (TLS certificate missing, port 502 or the
 serial port in use, upstream meter unreachable), `Start with the new configuration failed, continuing
-with the previous one` is logged and the previous settings are used again.
+with the previous one` is logged and the previous settings are used again. A reload also rereads the
+token file, so a token added or removed with `smartmeter token` applies without a restart.
 
 ```sh
 sudo systemctl reload smartmeter       # requires ExecReload in the unit, see Quick start
@@ -629,10 +668,28 @@ sudo systemctl reload smartmeter       # requires ExecReload in the unit, see Qu
 
 ---
 
+## Security
+
+- The REST API and the web page are served over HTTPS only, TLS 1.3. Use your own certificate and
+  `env: prod` on every device, see [TLS Certificate](#tls-certificate).
+- Give every caller its own token (`smartmeter token add <name>`); everything except `/`,
+  `/version` and the TLS handshake needs one. smartmeter stores only their hashes and logs who
+  calls. The REST API is read-only.
+- The Modbus TCP server has no authentication, as Modbus has none: whoever reaches port 502 reads
+  the meter values. Keep it in the home network.
+- Keep `/opt/smartmeter` owned by root, as in the [Quick start](#quick-start), and run the unit
+  from `contrib/` with its sandbox.
+- Limit who can reach the HTTPS port with `allowedIPs`, e.g. to your home network, and do not
+  expose it to the internet.
+
+Report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
+
+---
+
 ## Troubleshooting
 
 **The inverter shows no meter**
-Check `/ready` first. If it is ready, the problem is on the RS485 side: wiring (D+/D− swapped is
+Check the web page first. If the meter shows *Ready*, the problem is on the RS485 side: wiring (D+/D− swapped is
 the most common fault), termination, a second device answering on address 1, or the inverter not set
 to a Fronius Smart Meter on Modbus RTU. `Error parsing RTU frame` (CRC errors) in the log means
 requests arrive split: set `listen.rtu.interFrameDelay`, e.g. to `20ms`. USB adapters need it, and
@@ -643,10 +700,10 @@ so the meter keeps working, but the log fills with warnings.
 
 **`Serial port failed` in the log**
 The serial port went away, e.g. a USB adapter was unplugged. smartmeter reopens it every 5 seconds
-and logs `Serial port reopened` once it is back; meanwhile `/ready` answers 503 and `rtu` in
-`/health` shows the error.
+and logs `Serial port reopened` once it is back; meanwhile `rtu` in `/health` shows the error and
+the web page *Not ready*.
 
-**`/ready` answers 503**
+**The meter is not ready (`"ready": false` in `/health`)**
 The upstream meter has not delivered valid values for three poll intervals. `lastError` in
 `/health` and `Modbus poll failed` in the log give the reason, typically a timeout or a wrong
 address; while the source stays down the log repeats it once a minute with `failedPolls`, and
@@ -654,18 +711,21 @@ smartmeter keeps reconnecting on its own (see [Source failure](#source-failure))
 [spike filter](#spike-filter); check `maxCurrent` and the scaling of the power fields.
 
 **Service is `dead` immediately after start**
-A configuration error: the reason is printed on stdout. `Failed to load config file` names a key
+A configuration error: smartmeter exits with code 78, and the unit does not restart it
+(`RestartPreventExitStatus=78`); `systemctl status smartmeter` shows the reason. `Failed to load config file` names a key
 that does not exist (often a renamed one, e.g. `devices` → `meter`; keys renamed or removed in
 3.0.0 come with the fix, see [Upgrading to 3.0.0](#upgrading-to-300)) or a duration without unit;
 `config validation failed` names the invalid value. `bind: permission denied`
-for port 502 means `AmbientCapabilities=CAP_NET_BIND_SERVICE` is missing in the unit.
+for port 502 means `AmbientCapabilities=CAP_NET_BIND_SERVICE` is missing in the unit; `permission
+denied` on the serial port, that it is not in `DeviceAllow` or the user not in `dialout`.
 
 ---
 
 ## Releases
 
 Every release on the [releases page](https://github.com/womat/smartmeter/releases) carries archives
-for all Raspberry Pi architectures with the binary, `config/config.yaml`, `README.md` and `LICENSE`,
+for all Raspberry Pi architectures with the binary, `config/config.yaml`,
+`contrib/smartmeter.service`, `README.md` and `LICENSE`,
 plus a `checksums.txt` and a changelog. Versions follow [semantic versioning](https://semver.org/);
 a breaking change of the API or the configuration raises the major version.
 
@@ -673,6 +733,28 @@ a breaking change of the API or the configuration raises the major version.
 like `2.0.0-3-g0c13781-dirty` instead.
 
 Building from source needs Go and `make`: clone the repository and run `make help` for the targets.
+
+### Upgrading to 4.0.0
+
+The API key is replaced by bearer tokens, HTTPS is TLS 1.3 only, `/ready` is gone, and the unit
+lives in the repository:
+
+1. Make `/opt/smartmeter` root-owned as in the [Quick start](#quick-start).
+2. Put the new binary next to the old one as `bin/smartmeter.new`, and a copy of the config as
+   `etc/config.yaml.new` with `apiKey: …` replaced by `tokenFile: tokens`. The running 3.x is not
+   touched by either.
+3. Create the tokens with the new binary: `sudo /opt/smartmeter/bin/smartmeter.new token add
+   browser -config /opt/smartmeter/etc/config.yaml.new`. This only writes the token file; it
+   opens no port.
+4. Move `smartmeter.new` and `config.yaml.new` into place, install `contrib/smartmeter.service`,
+   then `sudo systemctl daemon-reload && sudo systemctl restart smartmeter`. A config that still
+   has `apiKey` is refused with a message that says so. An environment file that only held the API
+   key is no longer needed; the unit does not load one.
+5. Every caller sends `Authorization: Bearer <token>`; `X-API-Key` is no longer accepted. The web
+   page asks for the token once.
+6. Monitoring that polled `/ready` reads `ready` per meter and `connected` per RTU port from
+   `/health` instead, with a token.
+7. A client limited to TLS 1.2 can no longer connect. The Modbus side is unchanged.
 
 ### Upgrading to 3.0.0
 
