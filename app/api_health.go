@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/womat/golib/web"
+	"github.com/womat/golib/v2/web"
 	"github.com/womat/smartmeter/app/service/health"
 )
 

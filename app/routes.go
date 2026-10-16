@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/womat/golib/web"
+	"github.com/womat/golib/v2/web"
 )
 
 // SetupRoutes configures all HTTP routes and global middleware for the application.
@@ -42,11 +42,7 @@ func (app *App) SetupRoutes() {
 }
 
 // webConfig is the authentication of the protected routes: the bearer tokens from the token
-// file, nothing else. With ApiKey, JwtSecret and JwtID left empty, golib's other paths stay
-// disabled.
+// file, which since golib v2 is the only authentication web.WithAuth knows.
 func (app *App) webConfig() web.Config {
-	return web.Config{
-		Tokens:  app.config.Webserver.Tokens,
-		AppName: MODULE,
-	}
+	return web.Config{Tokens: app.config.Webserver.Tokens}
 }

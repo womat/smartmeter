@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/womat/golib/web"
+	"github.com/womat/golib/v2/web"
 	"github.com/womat/mbserver"
 	"github.com/womat/smartmeter/app/service/health"
 	"github.com/womat/smartmeter/app/service/meters"

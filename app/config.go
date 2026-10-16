@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/womat/golib/web"
+	"github.com/womat/golib/v2/web"
 	"github.com/womat/smartmeter/app/service/meters"
 	"gopkg.in/yaml.v3"
 )

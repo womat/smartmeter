@@ -786,8 +786,7 @@ modules below. Their terms apply to anyone distributing that binary, not to the 
 | `go.bug.st/serial`                       | BSD-3-Clause       |
 | `github.com/creack/goselect`             | MIT                |
 | `github.com/goburrow/serial`             | MIT                |
-| `github.com/womat/golib`                 | MIT                |
+| `github.com/womat/golib/v2`              | MIT                |
 | `github.com/swaggo/swag`, `http-swagger` | MIT (swagger builds only) |
-| `github.com/golang-jwt/jwt/v5`           | MIT                |
 | `gopkg.in/yaml.v3`                       | MIT and Apache-2.0 |
 | `golang.org/x/sys`                       | BSD-3-Clause       |
