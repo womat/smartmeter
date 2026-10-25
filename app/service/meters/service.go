@@ -209,16 +209,11 @@ func (s *ModbusService) closeReaders(readers []registerReader) error {
 func compileDevice(cfg MeterConfig) (*compiledDevice, error) {
 	compiled := &compiledDevice{Config: cfg}
 
-	fieldsSeen := make(map[fronius.CanonicalField]struct{}, len(cfg.Map))
 	for fieldName, mapping := range cfg.Map {
 		field, err := normalizeCanonicalField(fieldName)
 		if err != nil {
 			return nil, err
 		}
-		if _, exists := fieldsSeen[field]; exists {
-			return nil, fmt.Errorf("field %q is configured more than once", field)
-		}
-		fieldsSeen[field] = struct{}{}
 
 		compMapping := compiledMapping{
 			Field:      field,
@@ -539,11 +534,7 @@ func applyFixedMapping(snapshot *fronius.Snapshot, mapping compiledMapping) erro
 
 func applyExpressionMappings(snapshot *fronius.Snapshot, mappings []compiledMapping) error {
 	for _, mapping := range mappings {
-		vars := make(map[string]float64)
-		for field, value := range snapshotValues(*snapshot) {
-			vars[field] = value
-		}
-		result, err := evalExpression(mapping.Config.Expr, vars)
+		result, err := evalExpression(mapping.Config.Expr, snapshotValues(*snapshot))
 		if err != nil {
 			return fmt.Errorf("field %q: %w", mapping.ConfigName, err)
 		}
