@@ -332,8 +332,8 @@ td.field.fixed { font-style: italic; }
     <form class="keybox" id="keyform">
       <h2>smartmeter</h2>
       <p id="keyerr" class="err" hidden>The token was rejected. Check webserver.tokenFile on the Pi.</p>
-      <label for="apikey" class="label">Token</label>
-      <input id="apikey" type="password" autocomplete="current-password" placeholder="smartmeter token add browser" required>
+      <label for="token" class="label">Token</label>
+      <input id="token" type="password" autocomplete="current-password" placeholder="smartmeter token add browser" required>
       <p>Stored in this browser only and sent as a bearer token.</p>
       <button type="submit">Connect</button>
     </form>
@@ -395,11 +395,11 @@ td.field.fixed { font-style: italic; }
 <script>
 "use strict";
 const POLL_MS = 2000;
-const KEY = "smartmeter.apiKey";
+const KEY = "smartmeter.token";
 const MAX_FLASHES = 12; // per poll and link, so a busy link blinks instead of flickering
 const $ = id => document.getElementById(id);
 
-let apiKey = load();
+let token = load();
 let timer = null;
 let lastOk = null;     // time of the last successful poll, for the stale banner
 let last = null;       // counters of the previous poll, for rates and LEDs; null after a pause
@@ -714,10 +714,10 @@ function showLogin(rejected) {
   $("main").hidden = true;
   $("login").hidden = false;
   $("keyerr").hidden = !rejected;
-  $("apikey").value = "";
-  $("apikey").focus();
+  $("token").value = "";
+  $("token").focus();
 }
-function signedOut(rejected) { apiKey = ""; store(""); showLogin(rejected); }
+function signedOut(rejected) { token = ""; store(""); showLogin(rejected); }
 
 function stale(reason) {
   $("bannertext").textContent = reason + (lastOk ? ` Values below are stale since ${hms(lastOk)}.` : "");
@@ -728,7 +728,7 @@ function stale(reason) {
 }
 
 async function get(path) {
-  const r = await fetch(path, { headers: { "Authorization": "Bearer " + apiKey }, cache: "no-store" });
+  const r = await fetch(path, { headers: { "Authorization": "Bearer " + token }, cache: "no-store" });
   if (r.status === 401) throw Object.assign(new Error("unauthorized"), { auth: true });
   if (!r.ok) {
     let msg = `${path} answered ${r.status}`;
@@ -782,9 +782,9 @@ requestAnimationFrame(animate);
 
 $("keyform").addEventListener("submit", e => {
   e.preventDefault();
-  apiKey = $("apikey").value.trim();
-  if (!apiKey) return;
-  store(apiKey);
+  token = $("token").value.trim();
+  if (!token) return;
+  store(token);
   start();
 });
 $("signout").addEventListener("click", () => signedOut(false));
@@ -800,11 +800,11 @@ $("regs").addEventListener("toggle", () => pollRegisters());
 
 // Polling a hidden tab only loads the Pi; resume at once when the tab is shown again.
 document.addEventListener("visibilitychange", () => {
-  if (!apiKey) return;
+  if (!token) return;
   document.hidden ? stop() : start();
 });
 
-apiKey ? start() : showLogin(false);
+token ? start() : showLogin(false);
 </script>
 </body>
 </html>
