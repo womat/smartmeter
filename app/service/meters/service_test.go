@@ -25,7 +25,7 @@ func (r *fakeRegisterReader) ReadHoldingRegisters(address, quantity uint16) ([]u
 		return nil, r.err
 	}
 	data := make([]uint16, quantity)
-	for i := uint16(0); i < quantity; i++ {
+	for i := range quantity {
 		data[i] = r.registers[address+i]
 	}
 	return data, nil

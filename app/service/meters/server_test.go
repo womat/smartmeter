@@ -171,7 +171,7 @@ func TestStartReportsMissingSerialPort(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	rtu := &ListenRTUConfig{SerialConfig: SerialConfig{Port: "/dev/does-not-exist", BaudRate: 9600, DataBits: 8, Parity: "N", StopBits: 1}}
+	rtu := &ListenRTUConfig{Port: "/dev/does-not-exist", BaudRate: 9600, DataBits: 8, Parity: "N", StopBits: 1}
 	if err = s.Start(ListenConfig{RTU: rtu}); err == nil {
 		t.Error("Start succeeded with a missing serial port")
 	}

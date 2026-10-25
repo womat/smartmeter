@@ -310,7 +310,7 @@ func (b *RegisterBank) setFloat32(addr int, v float32) {
 func (b *RegisterBank) setString(addr, nRegs int, s string) {
 	buf := make([]byte, nRegs*2)
 	copy(buf, s)
-	for i := 0; i < nRegs; i++ {
+	for i := range nRegs {
 		b.regs[addr+i] = binary.BigEndian.Uint16(buf[i*2 : i*2+2])
 	}
 }
