@@ -16,6 +16,9 @@ logLevel: info
 
 # logDestination defines where logs are written to.
 # Supported values: stdout | stderr | /path/to/logfile
+# Under the systemd unit of contrib/, stdout goes to the journal. The unit keeps the file
+# system read-only: a log file needs its directory in ReadWritePaths= ("systemctl edit
+# smartmeter"), otherwise smartmeter does not start (exit code 78).
 logDestination: stdout
 
 # environment: dev | prod

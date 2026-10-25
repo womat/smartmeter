@@ -132,8 +132,9 @@ func run(configFile string, debug bool) int {
 		newLogger, err := xlog.Init(config.LogDestination, config.LogLevel)
 		switch {
 		case err != nil && lastGood == nil:
+			// logDestination is part of the config: a restart cannot open the file either.
 			fmt.Printf("Failed to initialize logger: %s\n", err.Error())
-			return 1
+			return exitConfig
 		case err != nil:
 			slog.Error("Failed to initialize logger, keeping the current one", "error", err)
 		default:
@@ -185,6 +186,7 @@ func run(configFile string, debug bool) int {
 	}
 }
 
+// About returns the build and project details printed by --about, as YAML.
 func About() string {
 	info := map[string]string{
 		"Author":   "Wolfgang Mathe",
