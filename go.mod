@@ -2,7 +2,7 @@ module github.com/womat/smartmeter
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/simonvetter/modbus v1.6.4
