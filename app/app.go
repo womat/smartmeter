@@ -39,14 +39,16 @@ import (
 var VERSION = "dev"
 
 const (
+	// MODULE is the application name, used for paths under /opt, the version output and logs.
 	MODULE = "smartmeter"
 
+	// ModeStop and ModeRestart tell shutdownProcedure whether the process ends or the App is
+	// rebuilt with the configuration file loaded again.
 	ModeStop    = 0
 	ModeRestart = 1
 )
 
-// App is the main application struct.
-// App is where the application is wired up.
+// App wires up one lifecycle of the application: Modbus server, polling, web server and signals.
 type App struct {
 	wg           sync.WaitGroup // tracks the web server goroutine
 	config       *Config        // app configuration

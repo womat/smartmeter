@@ -1,3 +1,6 @@
+// Package fronius holds what a Fronius Smart Meter 63A-3 serves: the canonical fields, the fixed
+// register maps (the proprietary RS485 map and the SunSpec block) and the encoding of a Snapshot
+// into registers.
 package fronius
 
 import (
@@ -59,6 +62,7 @@ const (
 	FieldEnergyImpL3   CanonicalField = "energy_import_l3"
 )
 
+// RegType is the data type of a register map entry.
 type RegType uint8
 
 const (
@@ -70,6 +74,9 @@ const (
 	RegString
 )
 
+// RegisterEntry is one value of a register map: a canonical field, or a fixed value or string
+// when Field is empty. Addr is the 0-based register address, SF the scale factor
+// (register = round(value / 10^SF)), NRegs the length of a string in registers.
 type RegisterEntry struct {
 	Addr      int
 	Field     CanonicalField
@@ -225,11 +232,13 @@ var SunSpecRegisterMap = []RegisterEntry{
 	fix(40177, RegUint16, 0),
 }
 
+// Snapshot holds the values of one poll by canonical field, numbers and strings apart.
 type Snapshot struct {
 	numbers map[CanonicalField]float64
 	strings map[CanonicalField]string
 }
 
+// NewSnapshot returns an empty Snapshot.
 func NewSnapshot() Snapshot {
 	return Snapshot{
 		numbers: make(map[CanonicalField]float64),
@@ -237,36 +246,44 @@ func NewSnapshot() Snapshot {
 	}
 }
 
+// Set stores the numeric value of field.
 func (s *Snapshot) Set(field CanonicalField, value float64) {
 	s.numbers[field] = value
 }
 
+// SetString stores the text of field.
 func (s *Snapshot) SetString(field CanonicalField, value string) {
 	s.strings[field] = value
 }
 
+// Has reports whether field has a numeric value.
 func (s Snapshot) Has(field CanonicalField) bool {
 	_, ok := s.numbers[field]
 	return ok
 }
 
+// HasString reports whether field has a text.
 func (s Snapshot) HasString(field CanonicalField) bool {
 	_, ok := s.strings[field]
 	return ok
 }
 
+// Float64 returns the numeric value of field, 0 when it has none.
 func (s Snapshot) Float64(field CanonicalField) float64 {
 	return s.numbers[field]
 }
 
+// String returns the text of field, "" when it has none.
 func (s Snapshot) String(field CanonicalField) string {
 	return s.strings[field]
 }
 
+// RegisterBank is the whole 16-bit register space, filled by WriteSnapshot.
 type RegisterBank struct {
 	regs [65536]uint16
 }
 
+// Uint16 returns the register at addr.
 func (b *RegisterBank) Uint16(addr int) uint16 { return b.regs[addr] }
 
 func (b *RegisterBank) setUint16(addr int, v uint16) { b.regs[addr] = v }
@@ -318,6 +335,7 @@ func (b *RegisterBank) writeValue(addr int, t RegType, value float64, sf int) er
 	return nil
 }
 
+// WriteSnapshot encodes every entry of FroniusRegisterMap from s, high word first.
 func (b *RegisterBank) WriteSnapshot(s Snapshot) error {
 	for _, entry := range FroniusRegisterMap {
 		if entry.Type == RegString {

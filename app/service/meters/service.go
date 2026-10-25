@@ -1,3 +1,6 @@
+// Package meters is the domain layer: it polls the upstream meters, turns their registers into
+// Fronius snapshots and serves them from a read-only Modbus server over TCP and RTU, one register
+// memory per unit ID.
 package meters
 
 import (
@@ -100,6 +103,7 @@ type snapshotWriter interface {
 	SetOnline(unitId uint8, online bool) error
 }
 
+// ModbusService polls every configured meter and writes its snapshots to the Modbus server.
 type ModbusService struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
@@ -130,6 +134,8 @@ func NewModbusService(meters map[string]MeterConfig) (*ModbusService, error) {
 	return service, nil
 }
 
+// Start opens the connection to every upstream meter and polls each in its own goroutine until
+// parent is cancelled or Close is called. A nil service does nothing.
 func (s *ModbusService) Start(parent context.Context, writer snapshotWriter) error {
 	if s == nil {
 		return nil
@@ -159,6 +165,7 @@ func (s *ModbusService) Start(parent context.Context, writer snapshotWriter) err
 	return nil
 }
 
+// Close stops polling, closes the upstream connections and waits for the poll goroutines.
 func (s *ModbusService) Close() error {
 	if s == nil {
 		return nil
