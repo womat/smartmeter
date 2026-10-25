@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/womat/smartmeter/pkg/fronius"
 )
 
 // ListenConfig configures the Modbus server. A listener is active when its block is present
@@ -287,7 +289,21 @@ func (m MeterConfig) Validate() error {
 	validDTypes := []string{"uint16", "uint32", "uint64", "int16", "int32", "int64", "float32"}
 	validByteOrders := []string{"big", "little"}
 
+	// exprVars are the fields an expression may read: the ones read from the source or fixed.
+	// Expressions are evaluated in map order and before the derived fields, so any other
+	// field would read 0 or depend on that order.
+	exprVars := make(map[string]float64)
 	for field, mapping := range m.Map {
+		t := strings.ToLower(mapping.Type)
+		if (t == "register" || t == "fixed") && field != string(fronius.FieldSerialStr) {
+			exprVars[field] = 1
+		}
+	}
+
+	for field, mapping := range m.Map {
+		if _, err := normalizeCanonicalField(field); err != nil {
+			return err
+		}
 		if !slices.Contains(validMappingTypes, strings.ToLower(mapping.Type)) {
 			return fmt.Errorf("field %q has invalid type %q", field, mapping.Type)
 		}
@@ -310,6 +326,11 @@ func (m MeterConfig) Validate() error {
 		case "expr":
 			if strings.TrimSpace(mapping.Expr) == "" {
 				return fmt.Errorf("field %q requires expr for expression mapping", field)
+			}
+			// A typo would otherwise fail every poll, and the unit IDs would never answer.
+			_, err := evalExpression(mapping.Expr, exprVars)
+			if err != nil && !errors.Is(err, errDivisionByZero) && !errors.Is(err, errSqrtNegative) {
+				return fmt.Errorf("field %q: invalid expr %q: %w", field, mapping.Expr, err)
 			}
 		}
 	}

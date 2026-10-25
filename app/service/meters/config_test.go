@@ -52,6 +52,28 @@ func TestMeterValidate(t *testing.T) {
 		},
 		"requires value": func(m *MeterConfig) { m.Map["power_total"] = MappingConfig{Type: "fixed"} },
 		"requires expr":  func(m *MeterConfig) { m.Map["power_total"] = MappingConfig{Type: "expr", Expr: " "} },
+		"unsupported canonical field": func(m *MeterConfig) {
+			m.Map["power_totl"] = MappingConfig{Type: "fixed", Value: 0}
+		},
+		// A typo in a name of the expression.
+		"unknown field powr_l1": func(m *MeterConfig) {
+			m.Map["power_l1"] = MappingConfig{Type: "fixed", Value: 0}
+			m.Map["power_total"] = MappingConfig{Type: "expr", Expr: "{powr_l1} * 3"}
+		},
+		// A canonical field without a mapping would be read as 0 on every poll.
+		"unknown field power_l2": func(m *MeterConfig) {
+			m.Map["power_l1"] = MappingConfig{Type: "fixed", Value: 0}
+			m.Map["power_total"] = MappingConfig{Type: "expr", Expr: "{power_l1} + {power_l2}"}
+		},
+		// Expressions are evaluated in map order, so one must not read another.
+		"unknown field current_l1": func(m *MeterConfig) {
+			m.Map["voltage_l1"] = MappingConfig{Type: "fixed", Value: 230}
+			m.Map["current_l1"] = MappingConfig{Type: "expr", Expr: "{power_total} / {voltage_l1}"}
+			m.Map["power_l1"] = MappingConfig{Type: "expr", Expr: "{current_l1} * {voltage_l1}"}
+		},
+		"missing closing parenthesis": func(m *MeterConfig) {
+			m.Map["power_l1"] = MappingConfig{Type: "expr", Expr: "({power_total} / 3"}
+		},
 	} {
 		m := validMeter()
 		m.ApplyDefaults()
@@ -59,6 +81,19 @@ func TestMeterValidate(t *testing.T) {
 		if err := m.Validate(); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Validate() = %v, want an error containing %q", err, want)
 		}
+	}
+}
+
+// TestValidateAcceptsExpressionsFailingOnlyForSomeValues: division by zero and SQRT of a
+// negative value depend on the values read, so Validate leaves them to the poll.
+func TestValidateAcceptsExpressionsFailingOnlyForSomeValues(t *testing.T) {
+	m := validMeter()
+	m.Map["voltage_l1"] = MappingConfig{Type: "fixed", Value: 230}
+	m.Map["current_l1"] = MappingConfig{Type: "expr", Expr: "{power_total} / ({voltage_l1} - 1)"}
+	m.Map["power_l1"] = MappingConfig{Type: "expr", Expr: "SQRT({power_total} - 2)"}
+	m.ApplyDefaults()
+	if err := m.Validate(); err != nil {
+		t.Errorf("Validate() = %v", err)
 	}
 }
 

@@ -1,11 +1,19 @@
 package meters
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"unicode"
+)
+
+// errDivisionByZero and errSqrtNegative depend on the values read, not on the expression;
+// MeterConfig.Validate accepts an expression that fails with one of them.
+var (
+	errDivisionByZero = errors.New("division by zero")
+	errSqrtNegative   = errors.New("sqrt of negative value")
 )
 
 type exprParser struct {
@@ -83,7 +91,7 @@ func (p *exprParser) parseTerm() (float64, error) {
 				return 0, err
 			}
 			if right == 0 {
-				return 0, fmt.Errorf("division by zero")
+				return 0, errDivisionByZero
 			}
 			left /= right
 		default:
@@ -135,7 +143,7 @@ func (p *exprParser) parseFactor() (float64, error) {
 			switch strings.ToUpper(ident) {
 			case "SQRT":
 				if arg < 0 {
-					return 0, fmt.Errorf("sqrt of negative value")
+					return 0, errSqrtNegative
 				}
 				return math.Sqrt(arg), nil
 			case "ABS":

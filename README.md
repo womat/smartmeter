@@ -290,6 +290,7 @@ listen:
 #   type: expr     - expr, e.g. "{power_l1} + {power_l2} + {power_l3}"; operators + - * /,
 #                    parentheses, SQRT(), ABS(). Write {field}, not ${field}: ${...} is
 #                    replaced by an environment variable when the file is loaded.
+#                    An expression reads only fields of type register or fixed.
 # =============================================================================
 meter:
   # Smartfox Pro as upstream meter, served to a Fronius inverter (RS485) and wallbox/evcc (TCP).
