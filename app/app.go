@@ -113,9 +113,6 @@ func (app *App) Run() (*App, error) {
 		slog.Info("Modbus server and meter polling started", "meters", meters.Names(app.config.Meter))
 	}
 
-	// handle the OS signals
-	app.HandleOSSignals()
-
 	names := make([]string, 0, len(app.config.Webserver.Tokens))
 	for _, t := range app.config.Webserver.Tokens {
 		names = append(names, t.Name)
@@ -133,6 +130,11 @@ func (app *App) Run() (*App, error) {
 		slog.Error("Web server failed to start", "url", app.web.Addr, "error", err)
 		return app, app.abort(err)
 	}
+
+	// Only now: a handler started earlier could take a signal while abort tears the App down,
+	// then block on app.restart that nobody reads. Until here a signal waits in app.signals,
+	// and app.serverErr is buffered.
+	app.HandleOSSignals()
 
 	slog.Info("Module started successfully",
 		"module", MODULE,
