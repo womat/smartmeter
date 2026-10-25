@@ -119,7 +119,9 @@ listen:
 #
 # poll         - Reading the upstream meter
 #   interval     - Poll interval as Go duration string (default 1s)
-#   maxBlockGap  - Unused registers read along to merge fields into one request (default 4)
+#   maxBlockGap  - Unused registers read along to merge fields into one request (default 4;
+#                  0 also means 4). A meter that refuses reads across unused registers:
+#                  maxBlockSize: 1 reads every field in a request of its own.
 #   maxBlockSize - Registers per request, at most 125 (default 125)
 #
 # map          - Canonical field -> source. Required for a Fronius meter:
