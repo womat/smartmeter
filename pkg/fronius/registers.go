@@ -70,6 +70,8 @@ const (
 	RegUint32
 	RegInt16
 	RegInt32
+	// RegFloat32 is used by no entry of the maps today. It stays, with its encoding and
+	// decoding, for future maps (e.g. the SunSpec float models); decided on 2026-10-25.
 	RegFloat32
 	RegString
 )
