@@ -12,6 +12,7 @@ import (
 
 	"github.com/womat/mbserver"
 	"github.com/womat/smartmeter/pkg/fronius"
+	"gopkg.in/yaml.v3"
 )
 
 type fakeRegisterReader struct {
@@ -543,5 +544,55 @@ func TestStaleTimeoutBeforeFirstSnapshot(t *testing.T) {
 	}
 	if st := device.status(time.Now()); st.OfflineSince != nil {
 		t.Errorf("OfflineSince = %v, want nil: the unit ID never answered", st.OfflineSince)
+	}
+}
+
+// TestApplyFixedMapping decodes the value from YAML, so every type yaml.v3 produces is covered:
+// int, int64 (above MaxInt32 on the 32-bit Pi), uint64 (above MaxInt64), float64, string and,
+// for serial_str, a number written as text.
+func TestApplyFixedMapping(t *testing.T) {
+	for _, tc := range []struct {
+		field fronius.CanonicalField
+		value string // YAML
+		want  float64
+		text  string // serial_str only
+	}{
+		{fronius.FieldDeviceID, "285", 285, ""},
+		{fronius.FieldFrequency, "50.0", 50, ""},
+		{fronius.FieldSerialNumber, "4000000000", 4000000000, ""},
+		{fronius.FieldSerialNumber, "18446744073709551615", math.MaxUint64, ""},
+		{fronius.FieldFirmware, `"117"`, 117, ""},
+		{fronius.FieldSerialStr, "12345678", 0, "12345678"},
+		{fronius.FieldSerialStr, "4000000000", 0, "4000000000"},
+		{fronius.FieldSerialStr, `"SM-1"`, 0, "SM-1"},
+	} {
+		var mapping MappingConfig
+		if err := yaml.Unmarshal([]byte("type: fixed\nvalue: "+tc.value), &mapping); err != nil {
+			t.Fatal(err)
+		}
+		snapshot := fronius.NewSnapshot()
+		err := applyFixedMapping(&snapshot, compiledMapping{Field: tc.field, ConfigName: string(tc.field), Config: mapping})
+		if err != nil || snapshot.Float64(tc.field) != tc.want || snapshot.String(tc.field) != tc.text {
+			t.Errorf("value %s (%T): got %v %q, %v; want %v %q", tc.value, mapping.Value,
+				snapshot.Float64(tc.field), snapshot.String(tc.field), err, tc.want, tc.text)
+		}
+	}
+
+	for _, tc := range []struct {
+		field fronius.CanonicalField
+		value string // YAML
+	}{
+		{fronius.FieldDeviceID, "[1, 2]"},
+		{fronius.FieldDeviceID, `"not a number"`},
+		{fronius.FieldSerialStr, "[1, 2]"},
+	} {
+		var mapping MappingConfig
+		if err := yaml.Unmarshal([]byte("type: fixed\nvalue: "+tc.value), &mapping); err != nil {
+			t.Fatal(err)
+		}
+		snapshot := fronius.NewSnapshot()
+		if err := applyFixedMapping(&snapshot, compiledMapping{Field: tc.field, ConfigName: string(tc.field), Config: mapping}); err == nil {
+			t.Errorf("%s value %s: no error", tc.field, tc.value)
+		}
 	}
 }
