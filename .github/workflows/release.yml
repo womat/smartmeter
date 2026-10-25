@@ -5,8 +5,9 @@
 # The tag is the single source of truth for the version: GoReleaser injects it
 # into app.VERSION via -ldflags, so the binary always reports the tag it was cut from.
 #
-# Before anything is published the tagged commit is tested, vetted and scanned
-# again: a release must not depend on whether the CI run of that commit passed.
+# Before anything is published the tagged commit is tested and linted again: a
+# release must not depend on whether the CI run of that commit passed.
+#
 # Actions are pinned to a commit SHA, with the release in a comment.
 name: release
 
@@ -25,6 +26,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # GoReleaser needs the full history to build the changelog
+          # The token is not left in .git/config for the steps that follow; GoReleaser
+          # gets its own through GITHUB_TOKEN, and fetching this public repo needs none.
+          persist-credentials: false
 
       # Releases are cut from main only. `make release` enforces this locally, but
       # a hand-made `git tag` bypasses it, so the workflow refuses to publish a
@@ -41,8 +45,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          # the newest patch release, not the one cached on the runner: govulncheck
-          # flags a standard library fixed in a newer patch
           check-latest: true
           cache: true
 
@@ -50,23 +52,13 @@ jobs:
       - name: Test with race detector
         run: make test
 
-      # Vet the default deployment target.
-      - name: Vet
-        env:
-          GOOS: linux
-          GOARCH: arm
-          GOARM: "6"
-        run: |
-          go vet ./...
-          go vet -tags swagger ./...
+      # gofmt, go fix, go mod tidy, go vet, golangci-lint and govulncheck for the
+      # deployment target, a Pi in 32-bit mode (PI_ARCH=arm6, the default) - the same
+      # as ci.yml and make lint locally, with the analysers pinned in the Makefile.
+      - name: Lint
+        run: make lint
 
-      # Pinned like in ci.yml. Built for the runner, analysing the deployment target.
-      - name: Vulnerability scan
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
-          GOOS=linux GOARCH=arm GOARM=6 "$(go env GOPATH)/bin/govulncheck" ./...
-
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"
           args: release --clean

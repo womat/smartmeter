@@ -16,7 +16,7 @@ make build_arm7        # Pi 2/3/4/Zero2, 32-bit OS
 make build_arm64       # Pi 3/4/5/Zero2, 64-bit OS
 make build_arm6_dev    # + Swagger UI (-tags swagger); _dev variants exist per arch
 make test              # go test -race ./...
-make lint              # gofmt, go vet, golangci-lint (.golangci.yml) and govulncheck
+make lint              # gofmt, go fix -diff, go mod tidy -diff, go vet, golangci-lint (.golangci.yml), govulncheck - for $(PI_ARCH), with and without -tags swagger
 make deploy            # build for $(PI_ARCH) then scp to $(PI_USER)@$(PI_HOST)
 make clean
 ```
@@ -27,7 +27,7 @@ make clean
 
 **There is one branch, `main`: work is committed to it and a release is a tag on it.** `make release TAG=vX.Y.Z` refuses to run from any other branch, with a dirty tree, or when `main` and `origin/main` differ; `.github/workflows/release.yml` re-checks that the tagged commit is on `main`. Versioning is SemVer and the Git tag is the single source of truth; the release workflow runs `goreleaser release --clean`, which builds linux arm64/armv7/armv6 and publishes a GitHub release with checksums and a grouped changelog. The `before` hook of `.goreleaser.yaml` must keep running `make ensure_dev_certs`. The archives carry `contrib/smartmeter.service`, the sandboxed unit the README installs (root-owned `/opt/smartmeter`, nothing writable, `CAP_NET_BIND_SERVICE` only, `DeviceAllow=/dev/ttyS0`, `RestartPreventExitStatus=78`). Validate changes with `goreleaser check` and `goreleaser release --snapshot --clean`.
 
-`.github/workflows/ci.yml` runs on every push/PR against `main` and weekly (a new Go or module vulnerability shows without a push): `make test` and golangci-lint natively, and a build matrix over armv6/armv7/arm64 that vets, builds (also `-tags swagger`) and runs govulncheck. golangci-lint (v2.15.0) keeps the default linters; `.golangci.yml` holds the exclusions, each one a decision with its reason (so far only errcheck in `_test.go`) — fix a finding rather than adding one. Actions are pinned to a commit SHA; dependabot updates them and the Go modules, but not the `go install` pins of govulncheck and golangci-lint (also in the `lint` target) — raise those by hand.
+`.github/workflows/ci.yml` runs on every push/PR against `main`, weekly (Monday 05:17 UTC) and by hand; `setup-go` takes the Go version from `go.mod` with `check-latest`, so the weekly run catches a toolchain advisory without a commit. It has a `test` job (native, `make test`) and a `build` matrix over `PI_ARCH` arm6/arm7/arm64 that runs `make lint` and `make build_<arch> build_<arch>_dev`; `release.yml` runs `make test` and `make lint` before GoReleaser. The job sets no `GOOS`/`GOARCH` of its own, or `make lint` would build the analysers for arm. golangci-lint keeps the default linters; `.golangci.yml` holds the exclusions, each one a decision with its reason (so far only errcheck in `_test.go`) — fix a finding rather than adding one. Actions are pinned to a commit SHA with the release in a comment, `govulncheck` and `golangci-lint` to a version in the Makefile only; `.github/dependabot.yml` updates actions (`chore(ci)`) and Go modules (`chore(deps)`, Swagger in a group of its own) weekly, but not the `go install` pins — raise those by hand.
 
 `PI_USER`/`PI_HOST`/`PI_PATH` default to placeholders — real host names and the production config stay out of this public repository. Set the device via environment variables or `Makefile.local` (gitignored).
 

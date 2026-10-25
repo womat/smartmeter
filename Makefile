@@ -79,13 +79,32 @@ clean: ## Remove build related file
 test: ensure_dev_certs ## run all tests with the race detector
 	go test -race ./...
 
-# The linters are pinned like govulncheck in CI; dependabot does not see them, raise
-# them by hand. golangci-lint runs the default linters with the exclusions in .golangci.yml.
-lint: ensure_dev_certs ## gofmt, go vet, golangci-lint and govulncheck
+# The analysers are pinned here only - ci.yml and release.yml call make lint - and
+# raised by hand: dependabot does not see go install lines. They are installed into
+# ./bin/tools for this machine (GOOS, GOARCH and GOARM cleared, so an exported target
+# cannot leak into the tool build), then run against the deployment target: `go run`
+# with a target GOOS/GOARCH would build a tool binary this machine cannot execute.
+# Both build variants are linted, with and without the Swagger UI. golangci-lint runs
+# the default linters with the exclusions in .golangci.yml.
+#
+# go fix -diff and go mod tidy -diff report a pending change and fail instead of
+# writing it; `go fix ./...` and `go mod tidy` apply it. go fix goes red on its own
+# when a new Go release adds a fixer - that is the point.
+GOLANGCI_LINT_VERSION := v2.15.0
+GOVULNCHECK_VERSION   := v1.9.0
+TOOLS_BIN             := $(CURDIR)/bin/tools
+
+lint: ensure_dev_certs ## gofmt, go fix, go mod tidy, go vet, golangci-lint and govulncheck, for the deployment target ($(PI_ARCH))
 	@test -z "$$(gofmt -l .)" || { echo "not gofmt'ed:"; gofmt -l .; exit 1; }
-	go vet ./...
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
-	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+	@d="$$($(GOENV_$(PI_ARCH)) go fix -diff ./...)"; test -z "$$d" || { echo "$$d"; echo "go fix has pending changes - run: go fix ./..."; exit 1; }
+	go mod tidy -diff
+	GOOS= GOARCH= GOARM= GOBIN=$(TOOLS_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOOS= GOARCH= GOARM= GOBIN=$(TOOLS_BIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	$(GOENV_$(PI_ARCH)) go vet ./...
+	$(GOENV_$(PI_ARCH)) go vet -tags swagger ./...
+	$(GOENV_$(PI_ARCH)) $(TOOLS_BIN)/golangci-lint run ./...
+	$(GOENV_$(PI_ARCH)) $(TOOLS_BIN)/golangci-lint run --build-tags swagger ./...
+	$(GOENV_$(PI_ARCH)) $(TOOLS_BIN)/govulncheck ./...
 
 ensure_dev_certs:
 	@mkdir -p $(DEV_CERT_DIR)
